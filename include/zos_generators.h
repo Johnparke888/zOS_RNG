@@ -1,12 +1,20 @@
 #pragma once
+
+struct Parm_Block
+{
+   unsigned long long word1;
+   unsigned long long word2;
+};
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-   int test_function_code (const struct Parm_Block *parm_block, int function);
-   static void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size);
-   static unsigned char jitter_sample_byte (int shift);
-   static bool prno_trng_installed ();
+   int test_function_code (struct Parm_Block *parm_block, int function);
+   void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size);
+   unsigned char jitter_sample_byte (int shift);
+   int prno_trng_installed ();
+   void jitter_fill (unsigned char *output_buffer_ptr, size_t size);
 #ifdef __cplusplus
 }
 #endif

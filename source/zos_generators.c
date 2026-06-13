@@ -1,32 +1,6 @@
-
-/*
- * zos_getentropy.cpp
- *
- * WHAT IT DOES
- * ------------
- * getentropy()-style fill with two backends, chosen at run time:
- *
- *   1. CPACF True Random Number Generator (the fast/strong path).
- *      Uses the PERFORM RANDOM NUMBER OPERATION (PRNO) instruction with
- *      function code 114 (0x72) = "PRNO-TRNG", a hardware noise source added
- *      with Message-Security-Assist Extension 7 (z14 and later). This is the
- *      same facility that backs /dev/[u]random on z14+; it produces conditioned
- *      true-random random_data and uses no parameter parm_block.
- *
- *   2. Timing-jitter fallback (the slow path, pre-z14 only).
- *      Harvests entropy from the nondeterministic latency of repeated
- *      supervisor transitions, sampled with STORE CLOCK FAST (__stckf). Note
- *      this measures timing *variance*, not a raw clock value -- a single
- *      STCKF reading would be predictable and worthless; the jitter between
- *      many readings is the actual entropy source.
- *
- * BUILD (test harness)
- * --------------------
- *   ibm-clang++ -m64 -D ZOS_GETENTROPY_TEST -o zostest zos_getentropy.cpp
- *   ./zostest
- *
- */
-
+#define _XOPEN_SOURCE 600
+#define _OPEN_SYS_FILE_EXT 1
+#define _OPEN_MSGQ_EXT 1
 #ifndef __MVS__
 // #error "This file targets z/OS USS only."
 #define __ptr32
@@ -41,63 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "zos_generators.h"
-
-/*******************************************************************************
- * Sources of Information and Code
- *
- * 1. z/Architecture Principles of Operation
- *    Fourteenth Edition (May, 2022)
- *    (C) Copyright International Business Machines Corporation 2000, 2022.
- *    All rights reserved.
- *
- * 2. National Institute of Standards and Technology
- *    Special Publication 800-22 revision 1a
- *    Natl. Inst. Stand. Technol. Spec. Publ. 800-22rev1a, 131 pages
- *    (April 2010)
- *    "A Statistical Test Suite for Random and Pseudorandom Number Generators
- *    for Cryptographic Applications"
- *
- *    This is free and unencumbered software released into the public domain.
- *
- *    The following applies to the NIST statistical code:
- *
- *    This code was accessed on 2019-01-05 during the US government shutdown,
- *    while the NIST government servers were unavailable. Code was located on
- *    the Internet Archive at:
- *
- *      https://web.archive.org/web/20180720195312/https://csrc.nist.gov/projects/random-bit-generation/documentation-and-software
- *
- *    which includes the following notice:
- *
- *      Software disclaimer: "This software was developed at the National
- *      Institute of Standards and Technology by employees of the Federal
- *      Government in the course of their official duties. Pursuant to title 17
- *      Section 105 of the United States Code this software is not subject to
- *      copyright protection and is in the public domain. The NIST Statistical
- *      Test Suite is an experimental system. NIST assumes no responsibility
- *      whatsoever for its use by other parties, and makes no guarantees,
- *      expressed or implied, about its quality, reliability, or any other
- *      characteristic. We would appreciate acknowledgment if the software is
- *      used."
- *
- *    End of NIST statement
- *
- * 3. ZOSLIB
- *    License: Apache-2.0
- *    ZOSLIB is a z/OS C/C++ library, available at:
- *      https://github.com/ibmruntimes/zoslib
- *    It is an extended implementation of the z/OS LE C Runtime Library.
- ******************************************************************************/
-
-enum class GeneratorType
-{
-   TRNO,
-   JITTER,
-   DEVURANDOM
-};
-
-
-
+// XL-specific NR parameter constraint:
+// https://www.ibm.com/docs/en/zos/2.4.0?topic=statements-inline-assembly-extension
+#if __clang_major__ < 18
+#define __ZL_NR(attr,reg) attr "NR:" #reg
+#else
+#define __ZL_NR(attr,reg) attr "{" #reg "}"
+#endif 
 /* PRNO function codes (bits 57-63 of GR0 select the function). */
 enum
 {
@@ -105,13 +29,9 @@ enum
    PRNO_TRNG = 114 /* 0x72: true random generate; no parameter parm_block       */
 };
 static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet checked. */
-struct Parm_Block
-{
-   unsigned long long word1;
-   unsigned long long word2;
-};
 
-int test_function_code (const struct Parm_Block *parm_block, int function)
+
+int test_function_code (struct Parm_Block *parm_block, int function)
 {
    if (parm_block == NULL || function < 0 || function > 127)
    {
@@ -142,8 +62,7 @@ int test_function_code (const struct Parm_Block *parm_block, int function)
 int prno_trng_installed ()
 {
 
-
-   psa *__ptr32 psa_ptr = 0; /* PSA is always at virtual address 0. */
+   struct psa *__ptr32 psa_ptr = 0; /* PSA is always at virtual address 0. */
    /* Gate 1: facility indicator in the PSA. 0x40 at byte 207. */
    if (!(0x40 & psa_ptr->flcfacl7))
    {
@@ -171,14 +90,12 @@ int prno_trng_installed ()
    {
       return cached;
    }
-   struct Parm_Block parm_block = {0, 0};
-
-   asm volatile (" prno 8,10\n"
-                 " jo *-4\n" /* CC3 => operation incomplete; reissue - instruction length is 4   */
-                 :
-                 : "{r0}"((unsigned long) PRNO_QUERY), "{r1}"(&parm_block)
-                 : "memory");
-
+     struct Parm_Block parm_block = {0, 0};
+      __asm volatile(" prno 8,10\n"
+            " jo *-4\n"
+            :
+            : __ZL_NR("",r0)(0), __ZL_NR("",r1)(&parm_block)
+            :);
    cached = test_function_code (&parm_block, PRNO_TRNG) ? 1 : 0;
 
    return cached;
@@ -383,7 +300,7 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
    size_t i = 0;
 
    /* de Bruijn-style lowest-set-bit position lookup (index = value % 37). */
-   constexpr unsigned int zbitcnt[] = {0xffffffff, 0,  1,  26, 2,  23, 27, 0,  3, 16, 24, 30, 28, 11, 0,  13, 4,  7, 17,
+   const unsigned int zbitcnt[] = {0xffffffff, 0,  1,  26, 2,  23, 27, 0,  3, 16, 24, 30, 28, 11, 0,  13, 4,  7, 17,
                                           0,          25, 22, 31, 15, 29, 19, 12, 6, 0,  21, 14, 9,  5,  20, 8,  19, 18};
 
    /* Calibrate: find a noise-floor bit position in (1, 11]. */

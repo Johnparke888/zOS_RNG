@@ -4,18 +4,20 @@ CXX_PROG=zos_getentropy
 # ************************ USS **************************
 # *******************************************************
 
+RM=rm -f
+
 CC=ibm-clang64
 CXX=ibm-clang++64
 LD=ibm-clang++64
 
 INCLUDE+=-I. -I../include -I/usr/local/include -I/usr/include
 
-CXXFLAGS+=-O0 -std=gnu++20 -fzos-le-char-mode=ascii -mnocsect -m64 \
+CXXFLAGS+=-O0 -std=gnu++23 -fzos-le-char-mode=ascii -mnocsect -m64 \
 -fno-short-enums -faligned-allocation $(INCLUDE)
 
 CFLAGS+=-O0 -std=c17 -fzos-le-char-mode=ascii -mnocsect -m64 $(INCLUDE)
 
-CXXSOURCES = zos_getentropy.cpp zos_statistical.cpp zos_generators.cpp
+CXXSOURCES = zos_entropy.cpp zos_statistical.cpp
 CXXOBJECTS = $(CXXSOURCES:.cpp=.o)
 
 CSOURCES = zos_generators.c
@@ -26,10 +28,10 @@ all:: clean $(CXX_PROG)
 $(CXX_PROG): $(CXXOBJECTS) $(COBJECTS)
 	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS)
 
-.cpp.o:
+%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-.c.o:
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean::

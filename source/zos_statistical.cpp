@@ -1,3 +1,10 @@
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <sstream>
+#include <cstdio>
+#include <iostream>
+
 #include "zos_statistical.h"
 
 #define MAX(x, y) ((x) < (y) ? (y) : (x))

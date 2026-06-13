@@ -65,7 +65,7 @@ enum class GeneratorType
  *
  *
  * ------------------------------------------------------------------------ */
-int zos_getentropy (void *output_buffer_ptr, size_t size, GeneratorType &generatorType)
+int zos_getentropy (void *output_buffer_ptr, size_t size, const GeneratorType &generatorType)
 {
    if (output_buffer_ptr == nullptr)
    {
@@ -77,17 +77,17 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, GeneratorType &generat
 
    switch (generatorType)
    {
-      case generatorType::TRNO:
+      case GeneratorType::TRNO:
       {
          jitter_fill (out, size);
          break;
       }
-      case generatorType::JITTER:
+      case GeneratorType::JITTER:
       {
          prno_trng_generate (out, size);
          break;
       }
-      case generatorType::DEVURANDOM
+      case GeneratorType::DEVURANDOM:
       {
         // prno_trng_generate (out, size);
          break;
@@ -95,10 +95,9 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, GeneratorType &generat
    }
    return 0;
 }
-#endif
 
 
-unsigned char *epsilon;
+//unsigned char *epsilon;
 
 
 static void hexdump (const unsigned char *p, size_t n)
@@ -121,7 +120,7 @@ int main ()
    int rc = 0;
    const int sample_size = 256;
    unsigned char random_data[256];
-   GeneratorType generatorType = GeneratorType::JITTER
+   GeneratorType generatorType = GeneratorType::JITTER;
 
 
        rc = zos_getentropy (random_data, sample_size, generatorType);
@@ -154,7 +153,6 @@ int main ()
    Serial (6, 2048);                  /* good choice */
    Serial (7, 2048);                  /* still okay, but thinner counts */
    Serial (6, sample_size * 8);       // m = 6 means the test counts all overlapping 6-bit patterns:
-   LinearComplexity (6, sample_size * 8);
    DiscreteFourierTransform (sample_size * 8);
 
    std::free (epsilon);
