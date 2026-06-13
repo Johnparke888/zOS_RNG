@@ -51,16 +51,21 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Makefile" />
     <None Include="README.md" />
+    <None Include="source\Makefile" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\zos_entropy.cpp" />
+    <ClCompile Include="source\zos_generators.c" />
+    <ClCompile Include="source\zos_generators.cpp" />
+    <ClCompile Include="source\zos_statistical.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\psa.h" />
     <ClInclude Include="include\zos_entropy-version.h" />
     <ClInclude Include="include\zos_entropy.h" />
+    <ClInclude Include="include\zos_generators.h" />
+    <ClInclude Include="include\zos_statistical.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{86ddf82b-5dc9-472c-8a4f-8e73d842b9f9}</ProjectGuid>
