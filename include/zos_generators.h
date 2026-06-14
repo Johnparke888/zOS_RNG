@@ -15,6 +15,7 @@ extern "C"
    unsigned char jitter_sample_byte (int shift);
    int prno_trng_installed ();
    void jitter_fill (unsigned char *output_buffer_ptr, size_t size);
+   int dev_urandom_generate (unsigned char *output, size_t length);
 #ifdef __cplusplus
 }
 #endif

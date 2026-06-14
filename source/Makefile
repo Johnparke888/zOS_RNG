@@ -20,13 +20,13 @@ CFLAGS+=-O0 -std=c17 -fzos-le-char-mode=ascii -mnocsect -m64 $(INCLUDE)
 CXXSOURCES = zos_entropy.cpp zos_statistical.cpp
 CXXOBJECTS = $(CXXSOURCES:.cpp=.o)
 
-CSOURCES = zos_generators.c
+CSOURCES = 
 COBJECTS = $(CSOURCES:.c=.o)
 
 all:: clean $(CXX_PROG)
 
 $(CXX_PROG): $(CXXOBJECTS) $(COBJECTS)
-	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS)
+	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) ./a.obj
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

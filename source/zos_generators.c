@@ -14,14 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>   // Required for O_RDONLY
+#include <unistd.h>  // Required for close()
 #include "zos_generators.h"
 // XL-specific NR parameter constraint:
 // https://www.ibm.com/docs/en/zos/2.4.0?topic=statements-inline-assembly-extension
-#if __clang_major__ < 18
-#define __ZL_NR(attr,reg) attr "NR:" #reg
-#else
-#define __ZL_NR(attr,reg) attr "{" #reg "}"
-#endif 
+
 /* PRNO function codes (bits 57-63 of GR0 select the function). */
 enum
 {
@@ -29,6 +27,53 @@ enum
    PRNO_TRNG = 114 /* 0x72: true random generate; no parameter parm_block       */
 };
 static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet checked. */
+
+/*
+ * read() may return fewer bytes than requested, or be interrupted by a
+ * signal. Loop until the whole buffer is filled. EINTR is retried; a return
+ * of 0 (EOF) from /dev/urandom is abnormal and is treated as a failure.
+ */
+static int read_full (int fd, unsigned char *output_buffer, size_t number_of_bytes_requested)
+{
+   size_t total_retrieved = 0;
+   while (total_retrieved < number_of_bytes_requested)
+   {
+      ssize_t bytes_read = read (fd, output_buffer + total_retrieved, number_of_bytes_requested - total_retrieved);
+      if (bytes_read <= 0)
+      {
+         if (bytes_read < 0 && errno == EINTR)
+         {
+            continue;
+         }
+         return -1;
+      }
+      total_retrieved += (size_t) bytes_read;
+   }
+   return 0;
+}
+
+/*
+ */
+int dev_urandom_generate (unsigned char *output, size_t length)
+{
+
+   int fd = open ("/dev/urandom", O_RDONLY);
+
+   if (fd < 0)
+   {
+      return -1;
+   }
+
+   if (read_full (fd, output, length) != 0)
+   {
+      close (fd);
+      return -2;
+   }
+
+   close (fd);
+
+   return 0;
+}
 
 
 int test_function_code (struct Parm_Block *parm_block, int function)
@@ -91,11 +136,12 @@ int prno_trng_installed ()
       return cached;
    }
      struct Parm_Block parm_block = {0, 0};
-      __asm volatile(" prno 8,10\n"
-            " jo *-4\n"
-            :
-            : __ZL_NR("",r0)(0), __ZL_NR("",r1)(&parm_block)
-            :);
+   asm volatile (" prno 8,10\n"
+                 " jo *-4\n" /* CC3 => operation incomplete; reissue - instruction length is 4   */
+                 :
+                 : "{r0}"((unsigned long) PRNO_QUERY), "{r1}"(&parm_block)
+                 : "memory");
+
    cached = test_function_code (&parm_block, PRNO_TRNG) ? 1 : 0;
 
    return cached;

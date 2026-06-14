@@ -1,52 +1,11 @@
+#include <cstdio>
+#include <iostream>
+#include <sstream>
+#include <cstdlib>
+
 #include "zos_entropy.h"
 #include "zos_statistical.h"
 #include "zos_generators.h"
-/*******************************************************************************
- * Sources of Information and Code
- *
- * 1. z/Architecture Principles of Operation
- *    Fourteenth Edition (May, 2022)
- *    (C) Copyright International Business Machines Corporation 2000, 2022.
- *    All rights reserved.
- *
- * 2. National Institute of Standards and Technology
- *    Special Publication 800-22 revision 1a
- *    Natl. Inst. Stand. Technol. Spec. Publ. 800-22rev1a, 131 pages
- *    (April 2010)
- *    "A Statistical Test Suite for Random and Pseudorandom Number Generators
- *    for Cryptographic Applications"
- *
- *    This is free and unencumbered software released into the public domain.
- *
- *    The following applies to the NIST statistical code:
- *
- *    This code was accessed on 2019-01-05 during the US government shutdown,
- *    while the NIST government servers were unavailable. Code was located on
- *    the Internet Archive at:
- *
- *      https://web.archive.org/web/20180720195312/https://csrc.nist.gov/projects/random-bit-generation/documentation-and-software
- *
- *    which includes the following notice:
- *
- *      Software disclaimer: "This software was developed at the National
- *      Institute of Standards and Technology by employees of the Federal
- *      Government in the course of their official duties. Pursuant to title 17
- *      Section 105 of the United States Code this software is not subject to
- *      copyright protection and is in the public domain. The NIST Statistical
- *      Test Suite is an experimental system. NIST assumes no responsibility
- *      whatsoever for its use by other parties, and makes no guarantees,
- *      expressed or implied, about its quality, reliability, or any other
- *      characteristic. We would appreciate acknowledgment if the software is
- *      used."
- *
- *    End of NIST statement
- *
- * 3. ZOSLIB
- *    License: Apache-2.0
- *    ZOSLIB is a z/OS C/C++ library, available at:
- *      https://github.com/ibmruntimes/zoslib
- *    It is an extended implementation of the z/OS LE C Runtime Library.
- ******************************************************************************/
 
 enum class GeneratorType
 {
@@ -58,10 +17,6 @@ enum class GeneratorType
 
 /* ------------------------------------------------------------------------ *
  * Public entry point.
- *
- * Contract mirrors POSIX/BSD getentropy(): fill "size" random_data, return 0, or -1
- * with errno set. The documented maximum for getentropy() is 256 random_data (the
- * original used 257 here; 256 is kept below, with the discrepancy noted).
  *
  *
  * ------------------------------------------------------------------------ */
@@ -89,7 +44,7 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, const GeneratorType &g
       }
       case GeneratorType::DEVURANDOM:
       {
-        // prno_trng_generate (out, size);
+         dev_urandom_generate (out, size);
          break;
       }
    }
@@ -118,16 +73,21 @@ int main ()
 {
 
    int rc = 0;
-   const int sample_size = 256;
-   unsigned char random_data[256];
-   GeneratorType generatorType = GeneratorType::JITTER;
+   const int sample_size = 4096;
+   unsigned char random_data[4096];
 
+constexpr std::array<GeneratorType, 3> allGenerators = {
+    GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM
+};
+constexpr std::array<const char*, 3> generatorNames = {
+    "PRNO-TRNG", "CPU jitter", "/dev/urandom"
+};
+ epsilon = (unsigned char *) malloc (sample_size * 8);
 
-       rc = zos_getentropy (random_data, sample_size, generatorType);
+for (std::size_t i = 0; i < allGenerators.size(); ++i)
+{
 
-   generatorType = GeneratorType::TRNO;
-
-   epsilon = (unsigned char *) malloc (sample_size * 8);
+   rc = zos_getentropy (random_data, sample_size, allGenerators[i]);
 
    if (epsilon == nullptr)
    {
@@ -142,6 +102,7 @@ int main ()
          epsilon[i * 8 + b] = (random_data[i] >> (7 - b)) & 1;
       }
    }
+   std::cout << generatorNames[i] << std::endl << "Sample Size in bytes: " << sample_size << std::endl << std::endl;
 
    LongestRunOfOnes (sample_size * 8);
    Runs (sample_size * 8);
@@ -154,7 +115,7 @@ int main ()
    Serial (7, 2048);                  /* still okay, but thinner counts */
    Serial (6, sample_size * 8);       // m = 6 means the test counts all overlapping 6-bit patterns:
    DiscreteFourierTransform (sample_size * 8);
-
+}
    std::free (epsilon);
 
    return 0;
