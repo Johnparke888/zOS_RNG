@@ -14,8 +14,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>   // Required for O_RDONLY
-#include <unistd.h>  // Required for close()
+#include <fcntl.h>        // Required for O_RDONLY
+#include <unistd.h>       // Required for close()
 #include "zos_generators.h"
 // XL-specific NR parameter constraint:
 // https://www.ibm.com/docs/en/zos/2.4.0?topic=statements-inline-assembly-extension
@@ -28,7 +28,17 @@ enum
 };
 static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet checked. */
 
-/*
+// Naive model of a PRNG.
+// This is not a secure generator, but it serves as a baseline for testing the statistical tests.
+// We will use a store clock fast, then compute SHA-512 of the clock value to produce output bits. 
+// The goal here is to demonstrate that such a simple generator fails the statistical tests, as expected, while the more sophisticated generators
+// (TRNO, jitter, /dev/urandom) pass them.
+
+int naive_prng_generate (unsigned char *output, size_t length)
+{
+
+}
+    /*
  * read() may return fewer bytes than requested, or be interrupted by a
  * signal. Loop until the whole buffer is filled. EINTR is retried; a return
  * of 0 (EOF) from /dev/urandom is abnormal and is treated as a failure.
@@ -124,18 +134,17 @@ int prno_trng_installed ()
     * PRNO-Query (PRNO Function Code 0)
     *
     * The contents of general registers R1, R1 + 1, R2, and R2 + 1 are ignored by the query function.
-    * A 128-bit status word is stored in the parameter parm_block. Bits 0-127 of this field correspond to function codes 0-127, respectively, of the
-    PERFORM
-    * RANDOM NUMBER OPERATION instruction. When a bit is one, the corresponding function is installed; otherwise, the function is not installed.
-    Condition
-    * code 0 is set when execution of the PRNOQuery function completes; condition code 3 is not applicable to this function
+    * A 128-bit status word is stored in the parameter parm_block. Bits 0-127 of this field correspond
+    * to function codes 0-127, respectively, of the PERFORM RANDOM NUMBER OPERATION instruction. 
+    * When a bit is one, the corresponding function is installed; otherwise, the function is not installed.
+    * Condition code 0 is set when execution of the PRNOQuery function completes; condition code 3 is not applicable to this function
 
     */
    if (cached != -1)
    {
       return cached;
    }
-     struct Parm_Block parm_block = {0, 0};
+   struct Parm_Block parm_block = {0, 0};
    asm volatile (" prno 8,10\n"
                  " jo *-4\n" /* CC3 => operation incomplete; reissue - instruction length is 4   */
                  :
@@ -294,41 +303,41 @@ unsigned char jitter_sample_byte (int shift)
  *
  * These routines provide a fallback entropy source for z/OS USS systems when a true hardware
  * or operating-system random number generator is not available.
- * 
-* The design is based on timing jitter. It repeatedly samples the z/Architecture high-resolution clock using STCKF and mixes small variations in
-* execution timing into output random_data. The timing variation is influenced by dispatcher activity, interrupt timing, CPU scheduling, cache
-* effects, pipeline state, and other system noise.
-*
-* Before producing random_data, jitter_fill() performs a short calibration step. It reads the clock back-to-back several times and examines the
-* low-order changing bits. From this it estimates how many low-order clock bits are unstable or noisy. That value is used as a shift count when collecting
-* samples, so the sampler avoids relying directly on clock bits that are too fine or too deterministic.
-*
-* For each output byte, jitter_sample_byte() performs repeated dispatcher calls using SVC 137, reads the clock after each call, shifts the timestamp
-* by the calibrated amount, and XORs the sampled values into an accumulator. The loop is bounded by both a maximum iteration count and an elapsed-time
-* cutoff so it cannot run indefinitely.
-*
-* jitter_fill() then chains the generated random_data through a running XOR accumulator. Each output byte depends on the previous accumulator state
-* and the latest jitter sample, rather than being a raw timestamp byte.
-*
-* Conceptually, the flow is:
-*
-* Calibrate STCKF timing behavior
-*         â
-* Estimate useful timing-jitter bit position
-*         â
-* For each requested byte:
-*     force dispatcher interaction
-*    sample STCKF repeatedly
-*     mix shifted timestamps with XOR
-*     chain result into output accumulator
-*         â
-* Return fallback random-looking random_data
-*
-* This mechanism should be considered a best-effort fallback entropy source, not a replacement for a real TRNG, ICSF, CPACF/PRNO, /dev/random, or a
-* cryptographic DRBG seeded from trusted entropy. Its output should preferably be mixed into a cryptographic hash or used only to seed a standard
-* DRBG,
-* rather than used directly as security-critical random data.
-*  */
+ *
+ * The design is based on timing jitter. It repeatedly samples the z/Architecture high-resolution clock using STCKF and mixes small variations in
+ * execution timing into output random_data. The timing variation is influenced by dispatcher activity, interrupt timing, CPU scheduling, cache
+ * effects, pipeline state, and other system noise.
+ *
+ * Before producing random_data, jitter_fill() performs a short calibration step. It reads the clock back-to-back several times and examines the
+ * low-order changing bits. From this it estimates how many low-order clock bits are unstable or noisy. That value is used as a shift count when
+ * collecting samples, so the sampler avoids relying directly on clock bits that are too fine or too deterministic.
+ *
+ * For each output byte, jitter_sample_byte() performs repeated dispatcher calls using SVC 137, reads the clock after each call, shifts the timestamp
+ * by the calibrated amount, and XORs the sampled values into an accumulator. The loop is bounded by both a maximum iteration count and an
+ * elapsed-time cutoff so it cannot run indefinitely.
+ *
+ * jitter_fill() then chains the generated random_data through a running XOR accumulator. Each output byte depends on the previous accumulator state
+ * and the latest jitter sample, rather than being a raw timestamp byte.
+ *
+ * Conceptually, the flow is:
+ *
+ * Calibrate STCKF timing behavior
+ *         â
+ * Estimate useful timing-jitter bit position
+ *         â
+ * For each requested byte:
+ *     force dispatcher interaction
+ *    sample STCKF repeatedly
+ *     mix shifted timestamps with XOR
+ *     chain result into output accumulator
+ *         â
+ * Return fallback random-looking random_data
+ *
+ * This mechanism should be considered a best-effort fallback entropy source, not a replacement for a real TRNG, ICSF, CPACF/PRNO, /dev/random, or a
+ * cryptographic DRBG seeded from trusted entropy. Its output should preferably be mixed into a cryptographic hash or used only to seed a standard
+ * DRBG,
+ * rather than used directly as security-critical random data.
+ *  */
 
 void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
 {
@@ -347,7 +356,7 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
 
    /* de Bruijn-style lowest-set-bit position lookup (index = value % 37). */
    const unsigned int zbitcnt[] = {0xffffffff, 0,  1,  26, 2,  23, 27, 0,  3, 16, 24, 30, 28, 11, 0,  13, 4,  7, 17,
-                                          0,          25, 22, 31, 15, 29, 19, 12, 6, 0,  21, 14, 9,  5,  20, 8,  19, 18};
+                                   0,          25, 22, 31, 15, 29, 19, 12, 6, 0,  21, 14, 9,  5,  20, 8,  19, 18};
 
    /* Calibrate: find a noise-floor bit position in (1, 11]. */
    while (bits == 0 || bits > 11)
@@ -371,4 +380,3 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
       output_buffer_ptr[i] = (unsigned char) byte_accumulator;
    }
 }
- 

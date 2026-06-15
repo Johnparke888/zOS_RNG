@@ -55,9 +55,9 @@
     <None Include="source\Makefile" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="naive_prng.c" />
     <ClCompile Include="source\zos_entropy.cpp" />
     <ClCompile Include="source\zos_generators.c" />
-    <ClCompile Include="source\zos_generators.cpp" />
     <ClCompile Include="source\zos_statistical.cpp" />
   </ItemGroup>
   <ItemGroup>
