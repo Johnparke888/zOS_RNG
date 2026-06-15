@@ -396,8 +396,8 @@ static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                         0x510e527fade682d1ULL,
                                                         0x9b05688c2b3e6c1fULL,
                                                         0x1f83d9abfb41bd6bULL,
-                                                        0x5be0cd19137e2179ULL},
-                                                       {0}};
+                                                        0x5be0cd19137e2179ULL}};
+                                                      
 
 static int naive_counter = 0;
 
@@ -406,11 +406,11 @@ static int naive_counter = 0;
  */
 static inline uint64_t z_stckf64 (void)
 {
-   uint64_t v = 0;
+   uint64_t start_time = 0;
 
-   asm volatile (" STCKF %0\n" : "=m"(v) : : "cc", "memory");
+    (void) __stckf (&start_time);
 
-   return v;
+   return start_time;
 }
 
 /*
@@ -439,9 +439,11 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
    parameter_block.block_length_high = 0;
    parameter_block.block_length_low = input_length * 8ull;
 
+   printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
    if (input_buffer_ptr == NULL && input_length != 0)
    {
       errno = EINVAL;
+      printf ("KLMD-SHA-512: invalid input buffer pointer\n");
       return -1;
    }
    // R0 = Bit positions 57-63 of general register 0 contain the function code.
@@ -454,23 +456,22 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
    unsigned long r2 = 0;
    unsigned long r4 = (unsigned long) (uintptr_t) (input_length ? input_buffer_ptr : &dummy);
    unsigned long r5 = (unsigned long) input_length;
-
-
-   parameter_block.block_length_low = r4 * 8ull;
-
-   while (r5 != 0 || input_length == 0)
-   {
+   
+   // print input length and first 16 bytes of input for debugging
+   printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
+   //  print register values for debugging
+   printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
+  
       /*
        * Format of any asm statement is:
        * asm volatile ("instruction" : output_operands : input_operands : clobbers);
        */
-      asm volatile (" KLMD 2,4\n"
+   __asm__ volatile (" KLMD 2,4\n"
                     " jo *-4\n" /* CC==3 (partial completion) -> retry */
-                    : "+{r4}"(r4), "+{r5}"(r5)
+                    : 
                     : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                    : "cc", "memory");
-   }
-
+                     : "r0","r1", "r2", "r4", "r5");
+   printf ("KLMD-SHA-512: KLMD instruction completed\n");
    memcpy (digest, parameter_block.h, SHA512_DIGEST_LEN);
    return 0;
 }
@@ -507,6 +508,8 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
    size_t produced = 0;
 
+   printf ("Generating %zu bytes of random data using naive_prng_generate...\n", length);
+
    while (produced < length)
    {
       naive_seed_material_t seed;
@@ -526,6 +529,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
       if (z_sha512_klmd (&seed, sizeof (seed), digest) != 0)
       {
+         printf ("Error: z_sha512_klmd failed with errno %d\n", errno);
          return -1;
       }
 
