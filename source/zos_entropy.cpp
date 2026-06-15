@@ -83,9 +83,9 @@ int main ()
    constexpr int sample_size = 4096;
    unsigned char random_data[sample_size];
 
-   constexpr std::array<GeneratorType, 3> allGenerators = {GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM};
+   constexpr std::array<GeneratorType, 4> allGenerators = {GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM, GeneratorType::NAIVE};
  
-   constexpr std::array<const char *, 3> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom"};
+   constexpr std::array<const char *, 4> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom","Naive PRNG"};
   
    epsilon = (unsigned char *) malloc (sample_size * 8);
 
