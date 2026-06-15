@@ -53,14 +53,18 @@
   <ItemGroup>
     <None Include="README.md" />
     <None Include="source\Makefile" />
+    <None Include="source\Makefile-RH" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="naive_prng.c" />
+    <ClCompile Include="source\matrix.cpp" />
+    <ClCompile Include="source\naive_prng.c" />
     <ClCompile Include="source\zos_entropy.cpp" />
     <ClCompile Include="source\zos_generators.c" />
     <ClCompile Include="source\zos_statistical.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\matrix.h" />
     <ClInclude Include="include\psa.h" />
     <ClInclude Include="include\zos_entropy-version.h" />
     <ClInclude Include="include\zos_entropy.h" />

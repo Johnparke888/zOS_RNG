@@ -6,23 +6,42 @@
 #include <iostream>
 
 #include "zos_statistical.h"
+#include "matrix.h"
 
-#define MAX(x, y) ((x) < (y) ? (y) : (x))
-#define MIN(x, y) ((x) > (y) ? (y) : (x))
-#define isNonPositive(x) ((x) <= 0.e0 ? 1 : 0)
-#define isPositive(x) ((x) > 0.e0 ? 1 : 0)
-#define isNegative(x) ((x) < 0.e0 ? 1 : 0)
-#define isGreaterThanOne(x) ((x) > 1.e0 ? 1 : 0)
-#define isZero(x) ((x) == 0.e0 ? 1 : 0)
-#define isOne(x) ((x) == 1.e0 ? 1 : 0)
 
+template <typename T> constexpr bool isNonPositive (T x) noexcept
+{
+   return x <= T{0};
+}
+
+template <typename T> constexpr bool isPositive (T x) noexcept
+{
+   return x > T{0};
+}
+
+template <typename T> constexpr bool isGreaterThanOne (T x) noexcept
+{
+   return x > T{1};
+}
+
+template <typename T> constexpr bool isZero (T x) noexcept
+{
+   return x == T{0};
+}
+
+template <typename T> constexpr bool isOne (T x) noexcept
+{
+   return x == T{1};
+}
+
+constexpr int MAXNUMOFTEMPLATES = 148; /* APERIODIC TEMPLATES: 148=>temp_length=9 */     
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                          G L O B A L  C O N S T A N T S
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 constexpr double ALPHA = 0.01; /* SIGNIFICANCE LEVEL */
-
-static const double rel_error = 1E-12;
+                                                                                             \
+constexpr double rel_error = 1e-12;
 
 constexpr double MACHEP = 1.11022302462515654042E-16;        // 2**-53
 constexpr double MAXLOG = 7.09782712893383996732224E2;       // log(MAXNUM)
@@ -34,6 +53,7 @@ static double biginv = 2.22044604925031308085e-16;
 
 int sgngam = 0;
 extern unsigned char *epsilon;
+
 
 double cephes_igamc (double a, double x)
 {
@@ -323,7 +343,7 @@ void Runs (int n)
       std::printf ("      -----------------------   = %f\n", erfc_arg);
       std::printf ("        2 std::sqrt(2n) pi (1-pi)\n");
       std::printf ("  ------------------------------------------\n");
-      if (isNegative (p_value) || isGreaterThanOne (p_value))
+      if (std::signbit (p_value) || isGreaterThanOne (p_value))
       {
          std::printf ("WARNING:  P_VALUE Is Out Of Range.\n");
       }
@@ -350,7 +370,7 @@ void RandomExcursions (int n)
                       {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
                       {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
 
-   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) || ((cycle = (int *) std::calloc (MAX (1000, n / 100), sizeof (int))) == nullptr))
+   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) || ((cycle = (int *) std::calloc (std::max (1000, n / 100), sizeof (int))) == nullptr))
    {
       std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
       if (S_k != nullptr)
@@ -372,7 +392,7 @@ void RandomExcursions (int n)
       if (S_k[i] == 0)
       {
          J++;
-         if (J > MAX (1000, n / 100))
+         if (J > std::max (1000, n / 100))
          {
             std::printf ("Error In Function randomExcursions:  Exceeding The Max Number Of Cycles Expected\n.");
             std::free (S_k);
@@ -395,7 +415,7 @@ void RandomExcursions (int n)
    std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
    std::printf ("  (b) Sequence Length (n)  = %d\n", n);
 
-   constraint = MAX (0.005 * std::pow (n, 0.5), 500);
+   constraint = std::max (0.005 * std::pow (n, 0.5), 500.0);
    if (J < constraint)
    {
       std::printf ("  ---------------------------------------------\n");
@@ -471,7 +491,7 @@ void RandomExcursions (int n)
          }
          p_value = cephes_igamc (2.5, sum / 2.0);
 
-         if (isNegative (p_value) || isGreaterThanOne (p_value))
+         if (std::signbit (p_value) || isGreaterThanOne (p_value))
          {
             std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
          }
@@ -625,7 +645,7 @@ void LongestRunOfOnes (int n)
       std::printf ("  <=10  11  12  13  14  15 >=16 P-value  Assignment");
       std::printf ("\n   %3d %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], nu[6]);
    }
-   if (isNegative (pval) || isGreaterThanOne (pval))
+   if (std::signbit (pval) || isGreaterThanOne (pval))
    {
       std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
    }
@@ -1575,7 +1595,7 @@ void ApproximateEntropy (int m, int n)
 
    if (m > (int) (std::log (seqLength) / std::log (2) - 5))
    {
-      std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, MAX (1, (int) (std::log (seqLength) / std::log (2) - 5)));
+      std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) - 5)));
       std::printf ("  Results are inaccurate!\n");
       std::printf ("  --------------------------------------------\n");
    }
@@ -1704,7 +1724,7 @@ void CumulativeSums (int n)
    std::printf ("  (a) The maximum partial sum = %d\n", z);
    std::printf ("  -------------------------------------------\n");
 
-   if (isNegative (p_value) || isGreaterThanOne (p_value))
+   if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
       std::printf ("  Warning:  P_Value Is Out Of Range\n");
    }
@@ -1733,7 +1753,7 @@ void CumulativeSums (int n)
    std::printf ("  (a) The maximum partial sum = %d\n", zrev);
    std::printf ("  -------------------------------------------\n");
 
-   if (isNegative (p_value) || isGreaterThanOne (p_value))
+   if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
       std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE\n");
    }
@@ -1915,7 +1935,7 @@ void Universal (int n)
    arg = std::fabs (phi - expected_value[L]) / (sqrt2 * sigma);
    p_value = std::erfc (arg);
 
-   if (isNegative (p_value) || isGreaterThanOne (p_value))
+   if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
       std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE\n");
    }
@@ -1923,158 +1943,6 @@ void Universal (int n)
    std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
    std::free (T);
-}
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                     R A N D O M  E X C U R S I O N S  T E S T
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-void RandomExcursions (int n)
-{
-   int b, i, j, k, J, x;
-   int cycleStart, cycleStop, *cycle = nullptr, *S_k = nullptr;
-   constexpr int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
-   int counter[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-   double p_value, sum, constraint, nu[6][8];
-   constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
-                      {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
-                      {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
-                      {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
-                      {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
-
-   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) || ((cycle = (int *) std::calloc (MAX (1000, n / 100), sizeof (int))) == nullptr))
-   {
-      std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
-      if (S_k != nullptr)
-      {
-         std::free (S_k);
-      }
-      if (cycle != nullptr)
-      {
-         std::free (cycle);
-      }
-      return;
-   }
-
-   J = 0; /* DETERMINE CYCLES */
-   S_k[0] = 2 * (int) epsilon[0] - 1;
-   for (i = 1; i < n; i++)
-   {
-      S_k[i] = S_k[i - 1] + 2 * epsilon[i] - 1;
-      if (S_k[i] == 0)
-      {
-         J++;
-         if (J > MAX (1000, n / 100))
-         {
-            std::printf ("ERROR IN FUNCTION randomExcursions:  EXCEEDING THE MAX NUMBER OF CYCLES EXPECTED\n.");
-            std::free (S_k);
-            std::free (cycle);
-            return;
-         }
-         cycle[J] = i;
-      }
-   }
-   if (S_k[n - 1] != 0)
-   {
-      J++;
-   }
-   cycle[J] = n;
-
-   std::printf ("     Random Excursions Test\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
-   std::printf ("  (b) Sequence Length (n)  = %d\n", n);
-
-   constraint = MAX (0.005 * std::pow (n, 0.5), 500);
-   if (J < constraint)
-   {
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  WARNING:  TEST NOT APPLICABLE.  THERE ARE AN\n");
-      std::printf ("     INSUFFICIENT NUMBER OF CYCLES.\n");
-      std::printf ("  ---------------------------------------------\n");
-      for (i = 0; i < 8; i++)
-      {
-         std::printf (results[TEST_RND_EXCURSION], "%f\n", 0.0);
-      }
-   }
-   else
-   {
-      std::printf ("  (c) Rejection Constraint = %f\n", constraint);
-      std::printf ("  -------------------------------------------\n");
-
-      cycleStart = 0;
-      cycleStop = cycle[1];
-      for (k = 0; k < 6; k++)
-      {
-         for (i = 0; i < 8; i++)
-         {
-            nu[k][i] = 0.;
-         }
-      }
-      for (j = 1; j <= J; j++)
-      { /* FOR EACH CYCLE */
-         for (i = 0; i < 8; i++)
-         {
-            counter[i] = 0;
-         }
-         for (i = cycleStart; i < cycleStop; i++)
-         {
-            if ((S_k[i] >= 1 && S_k[i] <= 4) || (S_k[i] >= -4 && S_k[i] <= -1))
-            {
-               if (S_k[i] < 0)
-               {
-                  b = 4;
-               }
-               else
-               {
-                  b = 3;
-               }
-               counter[S_k[i] + b]++;
-            }
-         }
-         cycleStart = cycle[j] + 1;
-         if (j < J)
-         {
-            cycleStop = cycle[j + 1];
-         }
-
-         for (i = 0; i < 8; i++)
-         {
-            if ((counter[i] >= 0) && (counter[i] <= 4))
-            {
-               nu[counter[i]][i]++;
-            }
-            else if (counter[i] >= 5)
-            {
-               nu[5][i]++;
-            }
-         }
-      }
-
-      for (i = 0; i < 8; i++)
-      {
-         x = stateX[i];
-         sum = 0.;
-         for (k = 0; k < 6; k++)
-         {
-            sum += std::pow (nu[k][i] - J * pi[(int) std::fabs (x)][k], 2) / (J * pi[(int) std::fabs (x)][k]);
-         }
-         p_value = cephes_igamc (2.5, sum / 2.0);
-
-         if (isNegative (p_value) || isGreaterThanOne (p_value))
-         {
-            std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
-         }
-
-         std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
-      }
-   }
-   std::printf ("\n");
-
-   std::free (S_k);
-   std::free (cycle);
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -2115,7 +1983,7 @@ void RandomExcursionsVariant (int n)
    std::printf ("  (b) Sequence Length (n)  = %d\n", n);
    std::printf ("  --------------------------------------------\n");
 
-   constraint = (int) MAX (0.005 * std::pow (n, 0.5), 500);
+   constraint = (int) std::max (0.005 * std::pow (n, 0.5), 500.0);
    if (J < constraint)
    {
       std::printf ("\n  WARNING:  TEST NOT APPLICABLE.  THERE ARE AN\n");
@@ -2141,7 +2009,7 @@ void RandomExcursionsVariant (int n)
          }
          p_value = std::erfc (std::fabs (count - J) / (std::sqrt (2.0 * J * (4.0 * std::fabs (x) - 2))));
 
-         if (isNegative (p_value) || isGreaterThanOne (p_value))
+         if (std::signbit (p_value) || isGreaterThanOne (p_value))
          {
             std::printf ("  (b) WARNING: P_VALUE IS OUT OF RANGE.\n");
          }
@@ -2165,7 +2033,7 @@ void OverlappingTemplateMatchings (int m, int n)
    double W_obs, eta, sum, chi2, p_value, lambda;
    int M, N, j, K = 5;
    unsigned int nu[6] = {0, 0, 0, 0, 0, 0};
-   // double			pi[6] = { 0.143783, 0.139430, 0.137319, 0.124314, 0.106209, 0.348945 };
+  // double	pi[6] = { 0.143783, 0.139430, 0.137319, 0.124314, 0.106209, 0.348945 };
    double pi[6] = {0.364091, 0.185659, 0.139381, 0.100571, 0.0704323, 0.139865};
    unsigned char *sequence;
 
@@ -2248,7 +2116,7 @@ void OverlappingTemplateMatchings (int m, int n)
    std::printf ("  -----------------------------------------------\n");
    std::printf ("  %3d %3d %3d %3d %3d %3d  %f ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], chi2);
 
-   if (isNegative (p_value) || isGreaterThanOne (p_value))
+   if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
       std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
    }
@@ -2311,7 +2179,7 @@ void NonOverlappingTemplateMatchings (int m, int n)
    varWj = M * (1.0 / std::pow (2.0, m) - (2.0 * m - 1.0) / std::pow (2.0, 2.0 * m));
    std::sprintf (directory, "templates/template%d", m);
 
-   if (((isNegative (lambda)) || (isZero (lambda))) || ((fp = fopen (directory, "r")) == nullptr) ||
+   if (((std::signbit (lambda)) || (isZero (lambda))) || ((fp = fopen (directory, "r")) == nullptr) ||
        ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
    {
       std::printf (" NONOVERLAPPING TEMPLATES TESTS ABORTED DUE TO ONE OF THE FOLLOWING : \n");
@@ -2359,7 +2227,7 @@ void NonOverlappingTemplateMatchings (int m, int n)
       }
       pi[K] = 1 - sum;
 
-      for (jj = 0; jj < MIN (MAXNUMOFTEMPLATES, numOfTemplates[m]); jj++)
+      for (jj = 0; jj < std::min (MAXNUMOFTEMPLATES, numOfTemplates[m]); jj++)
       {
          sum = 0;
 
@@ -2412,7 +2280,7 @@ void NonOverlappingTemplateMatchings (int m, int n)
          }
          p_value = cephes_igamc (N / 2.0, chi2 / 2.0);
 
-         if (isNegative (p_value) || isGreaterThanOne (p_value))
+         if (std::signbit (p_value) || isGreaterThanOne (p_value))
          {
             std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE.\n");
          }
@@ -2486,7 +2354,7 @@ void Rank (int n)
   
     int N, i, k, r;
    double p_value, product, chi_squared, arg1, p_32, p_31, p_30, R, F_32, F_31, F_30;
-//   unsigned char **matrix = create_matrix (32, 32);
+   unsigned char **matrix = create_matrix (32, 32);
 
    N = n / (32 * 32);
    if (isZero (N))
@@ -2519,11 +2387,11 @@ void Rank (int n)
       F_31 = 0;
       for (k = 0; k < N; k++)
       { /* FOR EACH 32x32 MATRIX   */
-//         def_matrix (32, 32, matrix, k);
+         def_matrix (32, 32, matrix, k);
 #if (DISPLAY_MATRICES == 1)
          display_matrix (32, 32, matrix);
 #endif
-//         R = computeRank (32, 32, matrix);
+         R = computeRank (32, 32, matrix);
          if (R == 32)
          {
             F_32++; /* DETERMINE FREQUENCIES */
@@ -2557,7 +2425,7 @@ void Rank (int n)
 
       p_value = std::exp (arg1);
 
-      if (isNegative (p_value) || isGreaterThanOne (p_value))
+      if (std::signbit (p_value) || isGreaterThanOne (p_value))
       {
          std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
       }

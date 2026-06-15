@@ -1,0 +1,38 @@
+CXX_PROG=zos_getentropy
+
+# *******************************************************
+# ************************ USS **************************
+# *******************************************************
+
+RM=rm -f
+
+CC=/usr/local/gcc-15.2.0/bin/g++
+CXX=/usr/local/gcc-15.2.0/bin/gcc
+LD=/usr/local/gcc-15.2.0/bin/gcc
+
+INCLUDE+=-I. -I../include -I/usr/local/include -I/usr/include
+
+CXXFLAGS+=-O0 -std=gnu++23 -m64 \
+ $(INCLUDE)
+
+CFLAGS+=-O0 -std=c17  -m64 $(INCLUDE)
+
+CXXSOURCES = zos_entropy.cpp zos_statistical.cpp matrix.cpp
+CXXOBJECTS = $(CXXSOURCES:.cpp=.o)
+
+CSOURCES = 
+COBJECTS = $(CSOURCES:.c=.o)
+
+all:: clean $(CXX_PROG)
+
+$(CXX_PROG): $(CXXOBJECTS) $(COBJECTS)
+	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) ./a.obj ./b.o
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean::
+	$(RM) $(CXXOBJECTS) $(COBJECTS) $(CXX_PROG)

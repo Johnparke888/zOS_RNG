@@ -6,6 +6,7 @@
 #include "zos_entropy.h"
 #include "zos_statistical.h"
 #include "zos_generators.h"
+#include "matrix.h"
 
 enum class GeneratorType
 {
