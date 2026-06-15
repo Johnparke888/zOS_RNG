@@ -26,7 +26,7 @@ COBJECTS = $(CSOURCES:.c=.o)
 all:: clean $(CXX_PROG)
 
 $(CXX_PROG): $(CXXOBJECTS) $(COBJECTS)
-	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) ./a.obj
+	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) ./a.obj ./b.o
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

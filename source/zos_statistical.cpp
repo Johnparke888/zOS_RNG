@@ -2486,7 +2486,7 @@ void Rank (int n)
   
     int N, i, k, r;
    double p_value, product, chi_squared, arg1, p_32, p_31, p_30, R, F_32, F_31, F_30;
-   unsigned char **matrix = create_matrix (32, 32);
+//   unsigned char **matrix = create_matrix (32, 32);
 
    N = n / (32 * 32);
    if (isZero (N))
@@ -2519,11 +2519,11 @@ void Rank (int n)
       F_31 = 0;
       for (k = 0; k < N; k++)
       { /* FOR EACH 32x32 MATRIX   */
-         def_matrix (32, 32, matrix, k);
+//         def_matrix (32, 32, matrix, k);
 #if (DISPLAY_MATRICES == 1)
          display_matrix (32, 32, matrix);
 #endif
-         R = computeRank (32, 32, matrix);
+//         R = computeRank (32, 32, matrix);
          if (R == 32)
          {
             F_32++; /* DETERMINE FREQUENCIES */

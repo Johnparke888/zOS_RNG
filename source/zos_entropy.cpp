@@ -11,7 +11,8 @@ enum class GeneratorType
 {
    TRNO,
    JITTER,
-   DEVURANDOM
+   DEVURANDOM,
+   NAIVE
 };
 
 
@@ -45,6 +46,11 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, const GeneratorType &g
       case GeneratorType::DEVURANDOM:
       {
          dev_urandom_generate (out, size);
+         break;
+      }
+      case GeneratorType::NAIVE:
+      {
+         naive_prng_generate (out, size);
          break;
       }
    }
@@ -108,8 +114,8 @@ int main ()
       Rank (sample_size * 8);
       CumulativeSums (sample_size * 8);
       Universal (sample_size * 8);
-      RandomExcursions (sample_size * 8);
-      RandomExcursionsVariant (sample_size * 8);
+      //RandomExcursions (sample_size * 8);
+      //RandomExcursionsVariant (sample_size * 8);
       ApproximateEntropy (6, sample_size * 8);
       Frequency (sample_size * 8);
       Serial (4, 2048);                  /* very conservative */

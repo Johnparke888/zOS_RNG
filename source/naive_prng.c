@@ -19,7 +19,6 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <stdatomic.h>
 
 #if !defined(__LP64__)
 #error "This sample expects 64-bit mode. Compile with ibm-clang64 or -m64."
@@ -53,7 +52,7 @@ static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                         0x5be0cd19137e2179ULL},
                                                        {0}};
 
-static atomic_ullong naive_counter = ATOMIC_VAR_INIT (0);
+static int naive_counter = 0;
 
 /*
  * Store Clock Fast: returns the 8-byte TOD clock value.
@@ -121,7 +120,7 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
       asm volatile (" KLMD 2,4\n"
                     " jo *-4\n" /* CC==3 (partial completion) -> retry */
                     : "+{r4}"(r4), "+{r5}"(r5)
-                    : "+{r0}"(r0), "+{r1}"(r1), "+{r4}"(r4), "+{r5}"(r5)
+                    : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
                     : "cc", "memory");
        
    }
@@ -170,7 +169,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
       memcpy (seed.domain, "naive-prng-v1", 13);
 
       seed.stckf_before = z_stckf64 ();
-      seed.counter = atomic_fetch_add_explicit (&naive_counter, 1, memory_order_relaxed);
+      seed.counter ++;
       seed.pid = (uint64_t) getpid ();
       seed.requested_len = (uint64_t) length;
       seed.offset = (uint64_t) produced;
