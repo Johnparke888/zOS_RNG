@@ -13,7 +13,23 @@
  * This is NOT a cryptographic RNG. Prefer PRNO function code 114 when
  * true random data is available.
  */
-
+#define _XOPEN_SOURCE 600
+#define _OPEN_SYS_FILE_EXT 1
+#define _OPEN_MSGQ_EXT 1
+#ifndef __MVS__
+// #error "This file targets z/OS USS only."
+#define __ptr32
+#endif
+#include <errno.h>
+#include <stddef.h>
+#include <builtins.h> /* __stckf */
+#include <psa.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -197,28 +213,3 @@ int naive_prng_generate (unsigned char *output, size_t length)
    return 0;
 }
 
-#ifdef TEST_NAIVE_PRNG
-#include <stdio.h>
-
-int main (void)
-{
-   unsigned char buf[128];
-
-   if (naive_prng_generate (buf, sizeof (buf)) != 0)
-   {
-      perror ("naive_prng_generate");
-      return 1;
-   }
-
-   for (size_t i = 0; i < sizeof (buf); ++i)
-   {
-      printf ("%02x", buf[i]);
-      if ((i + 1) % 32 == 0)
-      {
-         putchar ('\n');
-      }
-   }
-
-   return 0;
-}
-#endif

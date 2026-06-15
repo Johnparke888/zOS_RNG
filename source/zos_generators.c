@@ -28,16 +28,6 @@ enum
 };
 static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet checked. */
 
-// Naive model of a PRNG.
-// This is not a secure generator, but it serves as a baseline for testing the statistical tests.
-// We will use a store clock fast, then compute SHA-512 of the clock value to produce output bits. 
-// The goal here is to demonstrate that such a simple generator fails the statistical tests, as expected, while the more sophisticated generators
-// (TRNO, jitter, /dev/urandom) pass them.
-
-int naive_prng_generate (unsigned char *output, size_t length)
-{
-
-}
     /*
  * read() may return fewer bytes than requested, or be interrupted by a
  * signal. Loop until the whole buffer is filled. EINTR is retried; a return
