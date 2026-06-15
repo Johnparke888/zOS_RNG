@@ -56,7 +56,6 @@
     <None Include="source\Makefile-RH" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="naive_prng.c" />
     <ClCompile Include="source\matrix.cpp" />
     <ClCompile Include="source\naive_prng.c" />
     <ClCompile Include="source\zos_entropy.cpp" />
