@@ -4,10 +4,14 @@
 #ifndef __MVS__
 // #error "This file targets z/OS USS only."
 #define __ptr32
+void __stckf (unsigned long long *result);
+#include <cstdint>
 #endif
 #include <errno.h>
 #include <stddef.h>
+#ifdef __MVS__
 #include <builtins.h> /* __stckf */
+#endif
 #include <psa.h>
 #include <math.h>
 #include <stdbool.h>
@@ -28,7 +32,7 @@ enum
 };
 static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet checked. */
 
-    /*
+/*
  * read() may return fewer bytes than requested, or be interrupted by a
  * signal. Loop until the whole buffer is filled. EINTR is retried; a return
  * of 0 (EOF) from /dev/urandom is abnormal and is treated as a failure.
@@ -125,7 +129,7 @@ int prno_trng_installed ()
     *
     * The contents of general registers R1, R1 + 1, R2, and R2 + 1 are ignored by the query function.
     * A 128-bit status word is stored in the parameter parm_block. Bits 0-127 of this field correspond
-    * to function codes 0-127, respectively, of the PERFORM RANDOM NUMBER OPERATION instruction. 
+    * to function codes 0-127, respectively, of the PERFORM RANDOM NUMBER OPERATION instruction.
     * When a bit is one, the corresponding function is installed; otherwise, the function is not installed.
     * Condition code 0 is set when execution of the PRNOQuery function completes; condition code 3 is not applicable to this function
 
@@ -135,12 +139,13 @@ int prno_trng_installed ()
       return cached;
    }
    struct Parm_Block parm_block = {0, 0};
+#ifdef __MVS__
    asm volatile (" prno 8,10\n"
                  " jo *-4\n" /* CC3 => operation incomplete; reissue - instruction length is 4   */
                  :
                  : "{r0}"((unsigned long) PRNO_QUERY), "{r1}"(&parm_block)
                  : "memory");
-
+   #endif
    cached = test_function_code (&parm_block, PRNO_TRNG) ? 1 : 0;
 
    return cached;
@@ -188,11 +193,13 @@ void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
 #else
    /* R1 = GR8/GR9 (raw, len 0), R2 = GR10/GR11 (output_buffer, size).
     */
+#ifdef __MVS__
    __asm__ volatile (" prno 8,10\n"
                      " jo *-4\n"
                      : "+{r10}"(output_buffer_ptr), "+{r11}"(size)
                      : "{r0}"((unsigned long) PRNO_TRNG), "{r8}"(raw_addr), "{r9}"(raw_length)
                      : "memory");
+#endif
 #endif
 }
 
@@ -252,9 +259,12 @@ unsigned char jitter_sample_byte (int shift)
    unsigned long long t0;
    unsigned long long accumulator = 0;
    int i = 0;
+#ifdef __MVS__
    //__asm__ [volatile] ( template : outputs : inputs : clobbers );
+  
    // CALLDISP branch=no, sets r15 to 0 then issues SVC 137
    __asm__ volatile (" la 15,0\n svc 137\n" ::: "r15", "r6");
+#endif
    (void) __stckf (&start_time);
 
    start_time >>= shift;
@@ -263,7 +273,9 @@ unsigned char jitter_sample_byte (int shift)
 
    for (i = 0; i < 400; ++i)
    {
+#ifdef __MVS__
       __asm__ volatile (" la 15,0\n svc 137\n" ::: "r15", "r6");       // r15 and r6 are clobber register
+#endif
       (void) __stckf (&t0);
       t0 >>= shift;
       if ((t0 - start_time) > 0xfffff)
@@ -372,7 +384,7 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
 }
 
 #define KLMD_FC_SHA512 3u
-#define SHA512_DIGEST_LEN 64u
+#define SHA512_DIGEST_LENGTH 64u
 
 /*
  * KLMD-SHA-512 parameter block:
@@ -387,9 +399,9 @@ struct sha512_klmd_parm
    unsigned long long h[8];
    unsigned long long block_length_high;
    unsigned long long block_length_low;
-}  __attribute__ ((aligned (16)));
+} __attribute__ ((aligned (16)));
 
-static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
+static const sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                         0xbb67ae8584caa73bULL,
                                                         0x3c6ef372fe94f82bULL,
                                                         0xa54ff53a5f1d36f1ULL,
@@ -397,7 +409,7 @@ static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                         0x9b05688c2b3e6c1fULL,
                                                         0x1f83d9abfb41bd6bULL,
                                                         0x5be0cd19137e2179ULL}};
-                                                      
+
 
 static int naive_counter = 0;
 
@@ -412,7 +424,7 @@ static inline unsigned long long z_stckf64 ()
 {
    unsigned long long start_time = 0;
 
-    (void) __stckf (&start_time);
+   (void) __stckf (&start_time);
 
    return start_time;
 }
@@ -434,20 +446,21 @@ static inline unsigned long long z_stckf64 ()
  *
  * KLMD may be interruptible, so reissue until R3 reaches zero.
  */
-static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LEN])
+static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LENGTH])
 {
 
    struct sha512_klmd_parm parameter_block;
-   struct DataBlock data_block;
-   unsigned char dummy = 0;
 
+   unsigned char dummy = 0;
+   struct DataBlock data_block;
    memcpy (&parameter_block, &sha512_initial_parm, sizeof (parameter_block));
    parameter_block.block_length_high = 0;
    parameter_block.block_length_low = input_length * 8ull;
- 
+
    memset (&data_block, 0, sizeof (data_block));
    memcpy (&data_block, input_buffer_ptr, input_length);
    printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
+  
    if (input_buffer_ptr == NULL && input_length != 0)
    {
       errno = EINVAL;
@@ -464,38 +477,28 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
    unsigned long r2 = 0;
    unsigned long r4 = (unsigned long) (uintptr_t) &data_block;
    unsigned long r5 = (unsigned long) input_length;
-   
+
    // print input length and first 16 bytes of input for debugging
    printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
    //  print register values for debugging
    printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
-  
-      /*
-       * Format of any asm statement is:
-       * asm volatile ("instruction" : output_operands : input_operands : clobbers);
-       */
+
+   /*
+    * Format of any asm statement is:
+    * asm volatile ("instruction" : output_operands : input_operands : clobbers);
+    */
+#ifdef __MVS__
    __asm__ volatile (" KLMD 2,4\n"
-                    " jnz *-4\n" /* CC==3 (partial completion) -> retry */
-                    : 
-                    : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                     : );
+                     " jnz *-4\n" /* CC==3 (partial completion) -> retry */
+                     :
+                     : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
+                     :);
+#endif
    printf ("KLMD-SHA-512: KLMD instruction completed\n");
-   memcpy (digest, parameter_block.h, SHA512_DIGEST_LEN);
+   memcpy (digest, parameter_block.h, SHA512_DIGEST_LENGTH);
    return 0;
 }
 
-typedef struct
-{
-   char domain[16];
-   uint64_t stckf_before;
-   uint64_t stckf_after;
-   uint64_t counter;
-   uint64_t pid;
-   uint64_t requested_len;
-   uint64_t offset;
-   uintptr_t output_addr;
-   uintptr_t stack_addr;
-} naive_seed_material_t;
 
 /*
  * Public function.
@@ -518,39 +521,27 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
    printf ("Generating %zu bytes of random data using naive_prng_generate...\n", length);
 
+   struct DataBlock data_block;
+   unsigned char digest[SHA512_DIGEST_LENGTH];
+
    while (produced < length)
    {
-      naive_seed_material_t seed;
-      unsigned char digest[SHA512_DIGEST_LEN];
+      /* Re-seed every iteration: z_stckf64() returns a fresh store-clock
+         value on each call, so each block (and thus each digest) differs. */
+      memset (&data_block, 0, sizeof (data_block));
 
-      memset (&seed, 0, sizeof (seed));
-      memcpy (seed.domain, "naive-prng-v1", 13);
-
-      seed.stckf_before = z_stckf64 ();
-      seed.counter++;
-      seed.pid = (uint64_t) getpid ();
-      seed.requested_len = (uint64_t) length;
-      seed.offset = (uint64_t) produced;
-      seed.output_addr = (uintptr_t) (output + produced);
-      seed.stack_addr = (uintptr_t) &seed;
-      seed.stckf_after = z_stckf64 ();
-
-      if (z_sha512_klmd (&seed, sizeof (seed), digest) != 0)
+      for (size_t i = 0; i < 16; ++i)
       {
-         printf ("Error: z_sha512_klmd failed with errno %d\n", errno);
-         return -1;
+         data_block.data[i] = z_stckf64 ();
       }
 
+      z_sha512_klmd ((unsigned char *) &data_block, sizeof (data_block), digest);
+
       size_t remaining = length - produced;
-      size_t n = remaining < SHA512_DIGEST_LEN ? remaining : SHA512_DIGEST_LEN;
+      size_t chunk = (remaining < SHA512_DIGEST_LENGTH) ? remaining : SHA512_DIGEST_LENGTH;
 
-      memcpy (output + produced, digest, n);
-      produced += n;
-
-      /*
-       * Not secret in the strong sense, but clear the temporary digest anyway.
-       */
-      memset (digest, 0, sizeof (digest));
+      memcpy (output + produced, digest, chunk);
+      produced += chunk;
    }
 
    return 0;

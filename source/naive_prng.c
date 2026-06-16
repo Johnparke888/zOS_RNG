@@ -41,7 +41,7 @@
 #endif
 
 #define KLMD_FC_SHA512 3u
-#define SHA512_DIGEST_LEN 64u
+#define SHA512_DIGEST_LENGTH 64u
 
 /*
  * KLMD-SHA-512 parameter block:
@@ -99,7 +99,7 @@ number. The formation and updating of the address and length is dependent on the
  *
  * KLMD may be interruptible, so reissue until R3 reaches zero.
  */
-static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LEN])
+static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LENGTH])
 {
    sha512_klmd_parm_t parameter_block;
    unsigned char dummy = 0;
@@ -141,7 +141,7 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
        
    }
 
-   memcpy (digest, parameter_block.h, SHA512_DIGEST_LEN);
+   memcpy (digest, parameter_block.h, SHA512_DIGEST_LENGTH);
    return 0;
 }
 
@@ -179,7 +179,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
    while (produced < length)
    {
       naive_seed_material_t seed;
-      unsigned char digest[SHA512_DIGEST_LEN];
+      unsigned char digest[SHA512_DIGEST_LENGTH];
 
       memset (&seed, 0, sizeof (seed));
       memcpy (seed.domain, "naive-prng-v1", 13);
@@ -199,7 +199,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
       }
 
       size_t remaining = length - produced;
-      size_t n = remaining < SHA512_DIGEST_LEN ? remaining : SHA512_DIGEST_LEN;
+      size_t n = remaining < SHA512_DIGEST_LENGTH ? remaining : SHA512_DIGEST_LENGTH;
 
       memcpy (output + produced, digest, n);
       produced += n;
