@@ -20,7 +20,9 @@ void __stckf (unsigned long long *result);
 #include <string.h>
 #include <fcntl.h>        // Required for O_RDONLY
 #include <unistd.h>       // Required for close()
+#include <ctest.h>
 #include "zos_generators.h"
+
 // XL-specific NR parameter constraint:
 // https://www.ibm.com/docs/en/zos/2.4.0?topic=statements-inline-assembly-extension
 
@@ -472,11 +474,11 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
    // r2 - Operand register 1 is ignored.
    // R1 - parameter block address
    // R4 = input_buffer_ptr, R5 = input_length
-   unsigned long r0 = KLMD_FC_SHA512;
-   unsigned long r1 = (unsigned long) (uintptr_t) &parameter_block;
-   unsigned long r2 = 0;
-   unsigned long r4 = (unsigned long) (uintptr_t) &data_block;
-   unsigned long r5 = (unsigned long) input_length;
+   unsigned long long int r0 = KLMD_FC_SHA512;
+   unsigned long long int r1 = (unsigned long long int) (uintptr_t) &parameter_block;
+   unsigned long long int r2 = 0;
+   unsigned long long int r4 = (unsigned long long int) (uintptr_t) &data_block;
+   unsigned long long int r5 = input_length;
 
    // print input length and first 16 bytes of input for debugging
    printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
@@ -488,12 +490,14 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
     * asm volatile ("instruction" : output_operands : input_operands : clobbers);
     */
 #ifdef __MVS__
-   __asm__ volatile (" KLMD 2,4\n"
-                     " jnz *-4\n" /* CC==3 (partial completion) -> retry */
+   asm volatile ("LABEL KLMD 2,4\n"
+                     " jnz LABEL\n" 
                      :
                      : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                     :);
+                     : "r2");
+       __cdump("after KLMD");
 #endif
+   exit(8);
    printf ("KLMD-SHA-512: KLMD instruction completed\n");
    memcpy (digest, parameter_block.h, SHA512_DIGEST_LENGTH);
    return 0;
@@ -530,11 +534,11 @@ int naive_prng_generate (unsigned char *output, size_t length)
          value on each call, so each block (and thus each digest) differs. */
       memset (&data_block, 0, sizeof (data_block));
 
-      for (size_t i = 0; i < 16; ++i)
+      for (size_t i = 0; i < 13; ++i)
       {
          data_block.data[i] = z_stckf64 ();
       }
-
+      data_block.data[15] = 1024;
       z_sha512_klmd ((unsigned char *) &data_block, sizeof (data_block), digest);
 
       size_t remaining = length - produced;
