@@ -382,12 +382,12 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
  * For a one-shot KLMD call, initialize the chaining value to the SHA-512 IV
  * and set the prior bit count to zero.
  */
-typedef struct
+struct sha512_klmd_parm
 {
-   uint64_t h[8];
+   unsigned long long h[8];
    unsigned long long block_length_high;
    unsigned long long block_length_low;
-} sha512_klmd_parm_t __attribute__ ((aligned (16)));
+}  __attribute__ ((aligned (16)));
 
 static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                         0xbb67ae8584caa73bULL,
@@ -401,12 +401,16 @@ static const sha512_klmd_parm_t sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
 
 static int naive_counter = 0;
 
+struct DataBlock
+{
+   unsigned long long data[16];
+} __attribute__ ((aligned (16)));
 /*
  * Store Clock Fast: returns the 8-byte TOD clock value.
  */
-static inline uint64_t z_stckf64 (void)
+static inline unsigned long long z_stckf64 ()
 {
-   uint64_t start_time = 0;
+   unsigned long long start_time = 0;
 
     (void) __stckf (&start_time);
 
@@ -419,26 +423,30 @@ static inline uint64_t z_stckf64 (void)
  * R0 = 3 (SHA-512 function code)
  * R1 = pointer to parm block
  *
-The R2 field designates an even-odd pair of general registers and must designate an even-numbered register
-other than general register 0.
-The location of the leftmost byte of the second operand is specified by the contents of the R2 general
-register. The number of bytes in the second-operand location is specified in general register R2 + 1.
-As part of the operation, the address in general register R2 is incremented by the number of bytes processed
-from the second operand, and the length in general register R2 + 1 is decremented by the same
-number. The formation and updating of the address and length is dependent on the addressing mode.
+ * The R2 field designates an even-odd pair of general registers and must designate an even-numbered register
+ * other than general register 0.
+ * The location of the leftmost byte of the second operand is specified by the contents of the R2 general
+ * register. The number of bytes in the second-operand location is specified in general register R2 + 1.
+ * As part of the operation, the address in general register R2 is incremented by the number of bytes processed
+ * from the second operand, and the length in general register R2 + 1 is decremented by the same
+ * number. The formation and updating of the address and length is dependent on the addressing mode.
 
  *
  * KLMD may be interruptible, so reissue until R3 reaches zero.
  */
 static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LEN])
 {
-   sha512_klmd_parm_t parameter_block;
+
+   struct sha512_klmd_parm parameter_block;
+   struct DataBlock data_block;
    unsigned char dummy = 0;
 
    memcpy (&parameter_block, &sha512_initial_parm, sizeof (parameter_block));
    parameter_block.block_length_high = 0;
    parameter_block.block_length_low = input_length * 8ull;
-
+ 
+   memset (&data_block, 0, sizeof (data_block));
+   memcpy (&data_block, input_buffer_ptr, input_length);
    printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
    if (input_buffer_ptr == NULL && input_length != 0)
    {
@@ -454,7 +462,7 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
    unsigned long r0 = KLMD_FC_SHA512;
    unsigned long r1 = (unsigned long) (uintptr_t) &parameter_block;
    unsigned long r2 = 0;
-   unsigned long r4 = (unsigned long) (uintptr_t) (input_length ? input_buffer_ptr : &dummy);
+   unsigned long r4 = (unsigned long) (uintptr_t) &data_block;
    unsigned long r5 = (unsigned long) input_length;
    
    // print input length and first 16 bytes of input for debugging
@@ -467,10 +475,10 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
        * asm volatile ("instruction" : output_operands : input_operands : clobbers);
        */
    __asm__ volatile (" KLMD 2,4\n"
-                    " jo *-4\n" /* CC==3 (partial completion) -> retry */
+                    " jnz *-4\n" /* CC==3 (partial completion) -> retry */
                     : 
                     : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                     : "r0","r1", "r2", "r4", "r5");
+                     : );
    printf ("KLMD-SHA-512: KLMD instruction completed\n");
    memcpy (digest, parameter_block.h, SHA512_DIGEST_LEN);
    return 0;
