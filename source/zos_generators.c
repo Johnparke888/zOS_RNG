@@ -605,3 +605,42 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
    return 0;
 }
+int bad_raw_clock_generate (unsigned char *output, size_t length)
+{
+   size_t produced = 0;
+
+   while (produced < length)
+   {
+      unsigned long long time = z_stckf64 ();
+      size_t chunk = length - produced < sizeof (time) ? length - produced : sizeof (time);
+
+      memcpy (output + produced, &time, chunk);
+      produced += chunk;
+   }
+
+   return 0;
+}
+
+int bad_hash_counter_generate (unsigned char *output, size_t length)
+{
+   static unsigned long long counter = 0;
+   size_t produced = 0;
+
+   while (produced < length)
+   {
+      struct DataBlock data_block{};
+      unsigned char digest[SHA512_DIGEST_LENGTH];
+
+      data_block.data[0] = counter++;
+
+      z_sha512_klmd (&data_block, digest);
+
+      size_t remaining = length - produced;
+      size_t chunk = remaining < SHA512_DIGEST_LENGTH ? remaining : SHA512_DIGEST_LENGTH;
+
+      memcpy (output + produced, digest, chunk);
+      produced += chunk;
+   }
+
+   return 0;
+}

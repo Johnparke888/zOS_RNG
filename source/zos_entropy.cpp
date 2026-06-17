@@ -90,7 +90,9 @@ enum class GeneratorType
    TRNO,
    JITTER,
    DEVURANDOM,
-   NAIVE
+   NAIVE,
+   BADRAWCLOCK,
+   BADHASHCOUNTER
 };
 
 
@@ -158,10 +160,10 @@ int main ()
 
    int rc = 0;
 
-   constexpr std::array<GeneratorType, 4> allGenerators = {
-       GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM, GeneratorType::NAIVE};
+   constexpr std::array<GeneratorType, 6> allGenerators = {
+       GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM, GeneratorType::NAIVE, GeneratorType::BADRAWCLOCK, GeneratorType::BADHASHCOUNTER};
 
-   constexpr std::array<const char *, 4> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom", "Naive PRNG"};
+   constexpr std::array<const char *, 6> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom", "Naive PRNG", "Bad Raw Clock", "Bad Hash Counter"};
 
    constexpr std::size_t sample_size = 128 * 1024;
    std::vector<unsigned char> random_data (sample_size);

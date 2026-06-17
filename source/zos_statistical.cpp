@@ -1988,12 +1988,12 @@ void RandomExcursionsVariant (int n)
    constraint = (int) std::max (0.005 * std::pow (n, 0.5), 500.0);
    if (J < constraint)
    {
-      std::printf ("\n  WARNING:  TEST NOT APPLICABLE.  THERE ARE AN\n");
-      std::printf ("     INSUFFICIENT NUMBER OF CYCLES.\n");
+      std::printf ("\n  Warning:  Test Not Applicable. There are an\n");
+      std::printf ("     Insufficient Number Of Cycles.\n");
       std::printf ("  ---------------------------------------------\n");
       for (i = 0; i < 18; i++)
       {
-         std::printf ("%f\n", 0.0);
+        // std::printf ("%f\n", 0.0);
       }
    }
    else
