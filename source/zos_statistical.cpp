@@ -4,7 +4,7 @@
 #include <sstream>
 #include <cstdio>
 #include <iostream>
-
+#include <filesystem>
 #include "zos_statistical.h"
 #include "matrix.h"
 
@@ -361,10 +361,12 @@ void RandomExcursions (int n)
 {
    int b, i, j, k, J, x;
    int cycleStart, cycleStop, *cycle = nullptr, *S_k = nullptr;
-   int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
+   constexpr int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
    int counter[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+   
    double p_value, sum, constraint, nu[6][8];
-   double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
+   
+  constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
                       {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
                       {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
                       {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
@@ -424,7 +426,7 @@ void RandomExcursions (int n)
       std::printf ("  ---------------------------------------------\n");
       for (i = 0; i < 8; i++)
       {
-         std::printf ("%f\n", 0.0);
+        // std::printf ("%f\n", 0.0);
       }
    }
    else
@@ -497,7 +499,7 @@ void RandomExcursions (int n)
          }
 
          std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
-         std::printf ("%f\n", p_value);
+      
       }
    }
    std::printf ("\n");
@@ -2042,7 +2044,7 @@ void OverlappingTemplateMatchings (int m, int n)
 
    if ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr)
    {
-      std::printf ("      OVERLAPPING TEMPLATE OF ALL ONES TEST\n");
+      std::printf ("      Overlapping Template Of All Ones Test\n");
       std::printf ("  ---------------------------------------------\n");
       std::printf ("  TEMPLATE DEFINITION:  Insufficient memory, Overlapping Template Matchings test aborted!\n");
    }
@@ -2099,10 +2101,9 @@ void OverlappingTemplateMatchings (int m, int n)
       sum += nu[i];
    }
    p_value = cephes_igamc (K / 2.0, chi2 / 2.0);
-
-   std::printf ("      OVERLAPPING TEMPLATE OF ALL ONES TEST\n");
+   std::printf ("      Overlapping Template Of All Ones Test\n");
    std::printf ("  -----------------------------------------------\n");
-   std::printf ("  COMPUTATIONAL INFORMATION:\n");
+   std::printf ("  Computational Information:\n");
    std::printf ("  -----------------------------------------------\n");
    std::printf ("  (a) n (sequence_length)      = %d\n", n);
    std::printf ("  (b) m (block length of 1s)   = %d\n", m);
@@ -2111,7 +2112,7 @@ void OverlappingTemplateMatchings (int m, int n)
    std::printf ("  (e) lambda [(M-m+1)/2^m]     = %f\n", lambda);
    std::printf ("  (f) eta                      = %f\n", eta);
    std::printf ("  -----------------------------------------------\n");
-   std::printf ("     F R E Q U E N C Y\n");
+   std::printf ("     Frequency\n");
    std::printf ("    0   1   2   3   4 >=5   Chi^2   P-value  Assignment\n");
    std::printf ("  -----------------------------------------------\n");
    std::printf ("  %3d %3d %3d %3d %3d %3d  %f ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], chi2);
@@ -2150,9 +2151,13 @@ double Pr (int u, double eta)
           N O N O V E R L A P P I N G  T E M P L A T E  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+// Requires: #include <filesystem>  (C++17)
+//           #include <string>      (for std::to_string)
+
 void NonOverlappingTemplateMatchings (int m, int n)
 {
    int numOfTemplates[100] = {0, 0, 2, 4, 6, 12, 20, 40, 74, 148, 284, 568, 1116, 2232, 4424, 8848, 17622, 35244, 70340, 140680, 281076, 562152};
+  
    /*----------------------------------------------------------------------------
    NOTE:  Should additional templates lengths beyond 21 be desired, they must
    first be constructed, saved into files and then the corresponding
@@ -2163,7 +2168,6 @@ void NonOverlappingTemplateMatchings (int m, int n)
    FILE *fp = nullptr;
    double sum, chi2, p_value, lambda, pi[6], varWj;
    int i, j, jj, k, match, SKIP, M, N, K = 5;
-   char directory[100];
    unsigned char *sequence = nullptr;
 
    N = 8;
@@ -2171,20 +2175,24 @@ void NonOverlappingTemplateMatchings (int m, int n)
 
    if ((Wj = (unsigned int *) std::calloc (N, sizeof (unsigned int))) == nullptr)
    {
-      std::printf (" NONOVERLAPPING TEMPLATES TESTS ABORTED DUE TO ONE OF THE FOLLOWING : \n");
+      std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
       std::printf (" Insufficient memory for required work space.\n");
       return;
    }
    lambda = (M - m + 1) / std::pow (2, m);
    varWj = M * (1.0 / std::pow (2.0, m) - (2.0 * m - 1.0) / std::pow (2.0, 2.0 * m));
-   std::sprintf (directory, "templates/template%d", m);
 
-   if (((std::signbit (lambda)) || (isZero (lambda))) || ((fp = fopen (directory, "r")) == nullptr) ||
-       ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
+   /* Locate the template file via std::filesystem instead of a fixed char[] + sprintf. */
+   const std::filesystem::path templatePath = std::filesystem::path ("../templates") / ("template" + std::to_string (m));
+   const std::string templateStr = templatePath.string ();
+   std::error_code ec;
+
+   if (((std::signbit (lambda)) || (isZero (lambda))) || (!std::filesystem::exists (templatePath, ec)) ||
+       ((fp = fopen (templateStr.c_str (), "r")) == nullptr) || ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
    {
-      std::printf (" NONOVERLAPPING TEMPLATES TESTS ABORTED DUE TO ONE OF THE FOLLOWING : \n");
+      std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
       std::printf (" Lambda (%f) not being positive!\n", lambda);
-      std::printf (" Template file <%s> not existing\n", directory);
+      std::printf (" Template file <%s> not existing\n", templateStr.c_str ());
       std::printf (" Insufficient memory for required work space.\n");
       if (sequence != nullptr)
       {
@@ -2193,13 +2201,13 @@ void NonOverlappingTemplateMatchings (int m, int n)
    }
    else
    {
-      std::printf ("    NONPERIODIC TEMPLATES TEST\n");
+      std::printf ("    Non-Overlapping Templates Test\n");
       std::printf ("-------------------------------------------------------------------------------------\n");
-      std::printf ("    COMPUTATIONAL INFORMATION\n");
+      std::printf ("    Computational Information\n");
       std::printf ("-------------------------------------------------------------------------------------\n");
       std::printf (" LAMBDA = %f M = %d N = %d m = %d n = %d\n", lambda, M, N, m, n);
       std::printf ("-------------------------------------------------------------------------------------\n");
-      std::printf ("  F R E Q U E N C Y\n");
+      std::printf ("  Frequency\n");
       std::printf ("Template   W_1  W_2  W_3  W_4  W_5  W_6  W_7  W_8    Chi^2   P_value Assignment Index\n");
       std::printf ("-------------------------------------------------------------------------------------\n");
 
@@ -2305,7 +2313,6 @@ void NonOverlappingTemplateMatchings (int m, int n)
       std::fclose (fp);
    }
 }
-
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                     B L O C K  F R E Q U E N C Y  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */

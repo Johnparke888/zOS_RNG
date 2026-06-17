@@ -249,6 +249,7 @@ int main ()
       NonOverlappingTemplateMatchings (templateM, n);
 
       BlockFrequency (blockFrequencyM, n);
+      std::cout << "============================================================\n\n";
    }
 
    std::free (epsilon);
