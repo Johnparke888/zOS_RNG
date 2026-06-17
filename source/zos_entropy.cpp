@@ -7,7 +7,84 @@
 #include "zos_statistical.h"
 #include "zos_generators.h"
 #include "matrix.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <vector>
 
+static int floor_log2_int (int n)
+{
+   int r = 0;
+   while (n > 1)
+   {
+      n >>= 1;
+      ++r;
+   }
+   return r;
+}
+
+static int choose_serial_m (int n)
+{
+   /*
+    * Serial uses all overlapping m-bit patterns.
+    * Keep average observations per pattern reasonable.
+    */
+   int m = floor_log2_int (n) - 5;
+   return std::clamp (m, 2, 16);
+}
+
+static int choose_approximate_entropy_m (int n)
+{
+   /*
+    * Your ApproximateEntropy() function itself warns when:
+    *
+    *     m > log2(n) - 5
+    *
+    * Cap at 10 to keep the table size modest.
+    */
+   int m = floor_log2_int (n) - 5;
+   return std::clamp (m, 2, 10);
+}
+
+static int choose_block_frequency_M (int n)
+{
+   /*
+    * M is the block size, not a template length.
+    * Prefer 128 if it gives at least 100 blocks.
+    */
+   if (n / 128 >= 100)
+   {
+      return 128;
+   }
+
+   int M = n / 100;
+   return std::clamp (M, 20, 128);
+}
+
+static bool universal_is_applicable (int n)
+{
+   return n >= 387840;
+}
+
+static bool random_excursions_likely_applicable (int n)
+{
+   /*
+    * The actual applicability depends on the generated walk's cycle count J.
+    * This avoids running it on obviously too-small samples.
+    */
+   return n >= 387840;
+}
+
+static bool rank_is_reasonable (int n)
+{
+   /*
+    * Rank uses 32x32 matrices, 1024 bits each.
+    * This gives at least 38 matrices.
+    */
+   return n >= 38 * 32 * 32;
+}
 enum class GeneratorType
 {
    TRNO,
@@ -36,12 +113,12 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, const GeneratorType &g
    {
       case GeneratorType::TRNO:
       {
-         jitter_fill (out, size);
+         prno_trng_generate (out, size);
          break;
       }
       case GeneratorType::JITTER:
       {
-         prno_trng_generate (out, size);
+         jitter_fill (out, size);
          break;
       }
       case GeneratorType::DEVURANDOM:
@@ -80,56 +157,102 @@ int main ()
 {
 
    int rc = 0;
-   constexpr int sample_size = 4096;
-   unsigned char random_data[sample_size];
 
-   constexpr std::array<GeneratorType, 4> allGenerators = {GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM, GeneratorType::NAIVE};
- 
-   constexpr std::array<const char *, 4> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom","Naive PRNG"};
-  
-   epsilon = (unsigned char *) malloc (sample_size * 8);
+   constexpr std::array<GeneratorType, 4> allGenerators = {
+       GeneratorType::TRNO, GeneratorType::JITTER, GeneratorType::DEVURANDOM, GeneratorType::NAIVE};
 
-   for (std::size_t i = 0; i < allGenerators.size (); ++i)
+   constexpr std::array<const char *, 4> generatorNames = {"PRNO-TRNG", "CPU jitter", "/dev/urandom", "Naive PRNG"};
+
+   constexpr std::size_t sample_size = 128 * 1024;
+   std::vector<unsigned char> random_data (sample_size);
+
+   epsilon = static_cast<unsigned char *> (std::malloc (sample_size * 8));
+   
+   if (epsilon == nullptr)
    {
+      perror ("malloc");
+      return 1;
+   }
 
-      rc = zos_getentropy (random_data, sample_size, allGenerators[i]);
-
-      if (epsilon == nullptr)
+   for (std::size_t g = 0; g < allGenerators.size (); ++g)
+   {
+      rc = zos_getentropy (random_data.data (), random_data.size (), allGenerators[g]);
+      if (rc != 0)
       {
-         perror ("malloc");
-         return 1;
+         perror ("zos_getentropy");
+         continue;
       }
 
-      for (int i = 0; i < sample_size; i++)
+      for (std::size_t i = 0; i < sample_size; ++i)
       {
-         for (int b = 0; b < 8; b++)
+         for (int b = 0; b < 8; ++b)
          {
             epsilon[i * 8 + b] = (random_data[i] >> (7 - b)) & 1;
          }
       }
 
-      std::cout << generatorNames[i] << std::endl << "Sample Size in bytes: " << sample_size << std::endl << std::endl;
+      const int n = static_cast<int> (sample_size * 8);
 
-      LongestRunOfOnes (sample_size * 8);
-      Runs (sample_size * 8);
-      Rank (sample_size * 8);
-      CumulativeSums (sample_size * 8);
-      Universal (sample_size * 8);
-      //RandomExcursions (sample_size * 8);
-      //RandomExcursionsVariant (sample_size * 8);
-      ApproximateEntropy (6, sample_size * 8);
-      Frequency (sample_size * 8);
-      Serial (4, 2048);                  /* very conservative */
-      Serial (5, 2048);                  /* good */
-      Serial (6, 2048);                  /* good choice */
-      Serial (7, 2048);                  /* still okay, but thinner counts */
-      Serial (6, sample_size * 8);       // m = 6 means the test counts all overlapping 6-bit patterns:
-      DiscreteFourierTransform (sample_size * 8);
-    //  OverlappingTemplateMatchings (int m, int n);
-   //   NonOverlappingTemplateMatchings (int m, int n)
-   //   BlockFrequency (int M, int n)
+      const int blockFrequencyM = choose_block_frequency_M (n);
+      const int serialM = choose_serial_m (n);
+      const int approximateM = choose_approximate_entropy_m (n);
+      const int templateM = 9;
+
+      std::cout << "\n============================================================\n";
+      std::cout << generatorNames[g] << '\n';
+      std::cout << "Sample size in bytes : " << sample_size << '\n';
+      std::cout << "Sample size in bits  : " << n << '\n';
+      std::cout << "BlockFrequency M     : " << blockFrequencyM << '\n';
+      std::cout << "Serial m             : " << serialM << '\n';
+      std::cout << "ApproxEntropy m      : " << approximateM << '\n';
+      std::cout << "Template m           : " << templateM << '\n';
+      std::cout << "============================================================\n\n";
+
+      Frequency (n);
+      Runs (n);
+      CumulativeSums (n);
+      LongestRunOfOnes (n);
+      DiscreteFourierTransform (n);
+
+      if (rank_is_reasonable (n))
+      {
+         Rank (n);
+      }
+      else
+      {
+         std::cout << "Skipping Rank: sample is too small for a useful 32x32 matrix count.\n\n";
+      }
+
+      if (universal_is_applicable (n))
+      {
+         Universal (n);
+      }
+      else
+      {
+         std::cout << "Skipping Universal: requires at least 387840 bits.\n\n";
+      }
+
+      if (random_excursions_likely_applicable (n))
+      {
+         RandomExcursions (n);
+         RandomExcursionsVariant (n);
+      }
+      else
+      {
+         std::cout << "Skipping Random Excursions: sample is probably too small.\n\n";
+      }
+
+      ApproximateEntropy (approximateM, n);
+      Serial (serialM, n);
+
+      OverlappingTemplateMatchings (templateM, n);
+      NonOverlappingTemplateMatchings (templateM, n);
+
+      BlockFrequency (blockFrequencyM, n);
    }
-   std::free (epsilon);
 
+   std::free (epsilon);
+ 
+  
    return 0;
 }

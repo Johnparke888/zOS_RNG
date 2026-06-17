@@ -520,7 +520,7 @@ static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIG
    parameter_block.block_length_high = 0;
    parameter_block.block_length_low = sizeof(DataBlock) * 8ull;
 
-   printf ("KLMD-SHA-512: input length = %zu bytes\n", sizeof (DataBlock));
+   //printf ("KLMD-SHA-512: input length = %zu bytes\n", sizeof (DataBlock));
 
 
    // R0 = Bit positions 57-63 of general register 0 contain the function code.
@@ -536,22 +536,24 @@ static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIG
 
   
    //  print register values for debugging
-   printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
+  // printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
 
    /*
     * Format of any asm statement is:
     * asm volatile ("instruction" : output_operands : input_operands : clobbers);
     */
 #ifdef __MVS__
-   asm volatile ("LABEL KLMD 2,4\n"
-                 " jnz LABEL\n"
-                 :
-                 : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                 : "memory");
-
+   /* GR0=FC, GR1=parm (architecture-mandated); operand-2 pair held in
+      GR2/GR3 â volatile under XPLINK and usable under standard linkage.
+      R1 field is ignored, so 0 is fine. */
+   asm volatile (" KLMD 0,2\n"
+                 " jo   *-4\n" /* CC3 = partial completion; reissue */
+                 : "+{r2}"(r4), "+{r3}"(r5)
+                 : "{r0}"(r0), "{r1}"(r1)
+                 : "memory", "cc");
 #endif
 
-   printf ("KLMD-SHA-512: KLMD instruction completed\n");
+   
    memcpy (digest, parameter_block.H, SHA512_DIGEST_LENGTH);
    return 0;
 }
