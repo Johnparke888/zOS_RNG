@@ -133,6 +133,16 @@ int zos_getentropy (void *output_buffer_ptr, size_t size, const GeneratorType &g
          naive_prng_generate (out, size);
          break;
       }
+      case GeneratorType::BADRAWCLOCK:
+      {
+         bad_raw_clock_generate (out, size);
+         break;
+      }
+      case GeneratorType::BADHASHCOUNTER:
+      {
+         bad_hash_counter_generate (out, size);
+         break;
+      }
    }
    return 0;
 }
