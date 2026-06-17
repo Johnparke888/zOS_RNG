@@ -1478,7 +1478,7 @@ void DiscreteFourierTransform (int n)
       }
    }
    percentile = (double) count / (n / 2) * 100;
-   N_l = (double) count; /* number of peaks less than h = std::sqrt(3*n) */
+   N_l = (double) count; /* number of peaks less than H = std::sqrt(3*n) */
    N_o = (double) 0.95 * n / 2.0;
    d = (N_l - N_o) / std::sqrt (n / 4.0 * 0.95 * 0.05);
    p_value = erfc (std::fabs (d) / std::sqrt (2.0));

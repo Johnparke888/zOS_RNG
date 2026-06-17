@@ -11,6 +11,7 @@ void __stckf (unsigned long long *result);
 #include <stddef.h>
 #ifdef __MVS__
 #include <builtins.h> /* __stckf */
+#include <ctest.h>
 #endif
 #include <psa.h>
 #include <math.h>
@@ -20,7 +21,7 @@ void __stckf (unsigned long long *result);
 #include <string.h>
 #include <fcntl.h>        // Required for O_RDONLY
 #include <unistd.h>       // Required for close()
-#include <ctest.h>
+
 #include "zos_generators.h"
 
 // XL-specific NR parameter constraint:
@@ -147,7 +148,7 @@ int prno_trng_installed ()
                  :
                  : "{r0}"((unsigned long) PRNO_QUERY), "{r1}"(&parm_block)
                  : "memory");
-   #endif
+#endif
    cached = test_function_code (&parm_block, PRNO_TRNG) ? 1 : 0;
 
    return cached;
@@ -263,7 +264,7 @@ unsigned char jitter_sample_byte (int shift)
    int i = 0;
 #ifdef __MVS__
    //__asm__ [volatile] ( template : outputs : inputs : clobbers );
-  
+
    // CALLDISP branch=no, sets r15 to 0 then issues SVC 137
    __asm__ volatile (" la 15,0\n svc 137\n" ::: "r15", "r6");
 #endif
@@ -398,19 +399,19 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
  */
 struct sha512_klmd_parm
 {
-   unsigned long long h[8];
-   unsigned long long block_length_high;
-   unsigned long long block_length_low;
-} __attribute__ ((aligned (16)));
+   unsigned long long H[8];
+   unsigned long long block_length_high;   // High 64 bits of total bit count
+   unsigned long long block_length_low;    // bit length
+};
 
 static const sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
-                                                        0xbb67ae8584caa73bULL,
-                                                        0x3c6ef372fe94f82bULL,
-                                                        0xa54ff53a5f1d36f1ULL,
-                                                        0x510e527fade682d1ULL,
-                                                        0x9b05688c2b3e6c1fULL,
-                                                        0x1f83d9abfb41bd6bULL,
-                                                        0x5be0cd19137e2179ULL}};
+                                                      0xbb67ae8584caa73bULL,
+                                                      0x3c6ef372fe94f82bULL,
+                                                      0xa54ff53a5f1d36f1ULL,
+                                                      0x510e527fade682d1ULL,
+                                                      0x9b05688c2b3e6c1fULL,
+                                                      0x1f83d9abfb41bd6bULL,
+                                                      0x5be0cd19137e2179ULL}};
 
 
 static int naive_counter = 0;
@@ -418,7 +419,7 @@ static int naive_counter = 0;
 struct DataBlock
 {
    unsigned long long data[16];
-} __attribute__ ((aligned (16)));
+};
 /*
  * Store Clock Fast: returns the 8-byte TOD clock value.
  */
@@ -432,56 +433,108 @@ static inline unsigned long long z_stckf64 ()
 }
 
 /*
- * One-shot SHA-512 using KLMD.
- *
- * R0 = 3 (SHA-512 function code)
- * R1 = pointer to parm block
- *
- * The R2 field designates an even-odd pair of general registers and must designate an even-numbered register
- * other than general register 0.
- * The location of the leftmost byte of the second operand is specified by the contents of the R2 general
- * register. The number of bytes in the second-operand location is specified in general register R2 + 1.
- * As part of the operation, the address in general register R2 is incremented by the number of bytes processed
- * from the second operand, and the length in general register R2 + 1 is decremented by the same
- * number. The formation and updating of the address and length is dependent on the addressing mode.
+*
+* 
+* COMPUTE LAST MESSAGE DIGEST
+* KLMD R1,R2 [RRE]
+* R1 and R2 do not represent specific general-purpose registers; they are positional notations for the first 
+* and second register operands.
+* Here R1 is a positional designation, while GR1 is a specific register. The same applies to R2 and GR2.
 
- *
- * KLMD may be interruptible, so reissue until R3 reaches zero.
- */
-static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, unsigned char digest[SHA512_DIGEST_LENGTH])
+* 
+* Operand register 1 (R1)is ignored.
+* The R2 field designates an even-odd pair of general registers and must designate an even-numbered register
+* other than general register 0.
+*
+* The location of the leftmost byte of the second operand is specified by the contents of the R2 general
+* register. The number of bytes in the second-operand location is specified in general register R2 + 1.
+* As part of the operation, the address in general register R2 is incremented by the number of bytes processed
+* from the second operand, and the length in general register R2 + 1 is decremented by the same
+* number. The formation and updating of the address and length is dependent on the addressing mode.
+*
+* The second operand is processed as specified by the function code using an initial
+* chaining value in the parameter block, and the result replaces the chaining value.
+* For the SHA-1,SHA-256, and SHA-512 functions, the operation also uses a message bit length
+* in the parameter block.
+*
+* The message digest for the message (M) in operand 2 is generated using the SHA-512 algorithm with the
+* chaining value (called H fields) and message-bit length information in the parameter block.
+* If the message in operand 2 is equal to or greater than 128 bytes, an intermediate message digest is
+* generated for each 128-byte message block using the SHA-512 block digest algorithm with the 64-byte
+* chaining value in the parameter block, and the generated intermediate message digest, also called the
+* output chaining value (OCV), is stored into the chaining-value field of the parameter block.
+* This operation repeats until the remaining message is less than 128 bytes or until a CPU-determined
+* number of blocks have been stored.
+*
+* For the KLMD-SHA-1, KLMD-SHA-256, and KLMD-SHA-512 functions, when processing the last message part,
+* the program must compute the length of the original message in bits and place this length value in the
+* message-bit-length field of the parameter block, and use the COMPUTE LAST MESSAGE
+* DIGEST instruction.
+*
+* The COMPUTE LAST MESSAGE DIGEST instruction does not require the second operand to be a multiple of the data block size. It
+* first processes complete blocks, and may set condition code 3 before processing all blocks. After processing all complete blocks,
+* it then performs the padding operation including the remaining portion of the second operand. This may require one or two
+* iterations of the designated block digest algorithm.
+* KIMD
+
+ * Code   Function       Parm.          Data
+                         Block Size Block Size
+                         (bytes)     (bytes)
+ 0        KLMD-Query       16            â
+ 1        KLMD-SHA-1       28           64
+ 2        KLMD-SHA-256     40           64
+ 3        KLMD-SHA-512     80          128
+32        KLMD-SHA3-224   200          144
+33        KLMD-SHA3-256   200          136
+34        KLMD-SHA3-384   200          104
+35        KLMD-SHA3-512   200           72
+36        KLMD-SHAKE-128  200          168
+37        KLMD-SHAKE-256  200          136
+
+* Register Use:
+* GR0 = 3 (SHA-512 function code)
+* GR2 = ignored
+* GR1 = pointer to parm block
+* GR4 = pointer to data block
+* GR5 = length of data block
+* 
+* condition code 0 normal completion
+* condition code 3 partial completion
+* 
+*/
+
+static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIGEST_LENGTH])
 {
 
-   struct sha512_klmd_parm parameter_block;
-
+   sha512_klmd_parm parameter_block;
    unsigned char dummy = 0;
-   struct DataBlock data_block;
-   memcpy (&parameter_block, &sha512_initial_parm, sizeof (parameter_block));
-   parameter_block.block_length_high = 0;
-   parameter_block.block_length_low = input_length * 8ull;
 
-   memset (&data_block, 0, sizeof (data_block));
-   memcpy (&data_block, input_buffer_ptr, input_length);
-   printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
-  
-   if (input_buffer_ptr == NULL && input_length != 0)
+   if (data_block == NULL)
    {
       errno = EINVAL;
       printf ("KLMD-SHA-512: invalid input buffer pointer\n");
       return -1;
    }
+
+   memcpy (&parameter_block.H, &sha512_initial_parm, sizeof (sha512_initial_parm));
+   parameter_block.block_length_high = 0;
+   parameter_block.block_length_low = sizeof(DataBlock) * 8ull;
+
+   printf ("KLMD-SHA-512: input length = %zu bytes\n", sizeof (DataBlock));
+
+
    // R0 = Bit positions 57-63 of general register 0 contain the function code.
    // Register pairs: R4/R5
    // r2 - Operand register 1 is ignored.
    // R1 - parameter block address
-   // R4 = input_buffer_ptr, R5 = input_length
+   // R4 = data_block, R5 = input_length
    unsigned long long int r0 = KLMD_FC_SHA512;
    unsigned long long int r1 = (unsigned long long int) (uintptr_t) &parameter_block;
    unsigned long long int r2 = 0;
-   unsigned long long int r4 = (unsigned long long int) (uintptr_t) &data_block;
-   unsigned long long int r5 = input_length;
+   unsigned long long int r4 = (unsigned long long int) (uintptr_t) data_block;
+   unsigned long long int r5 = sizeof (DataBlock);
 
-   // print input length and first 16 bytes of input for debugging
-   printf ("KLMD-SHA-512: input length = %zu bytes\n", input_length);
+  
    //  print register values for debugging
    printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
 
@@ -491,15 +544,15 @@ static int z_sha512_klmd (const void *input_buffer_ptr, size_t input_length, uns
     */
 #ifdef __MVS__
    asm volatile ("LABEL KLMD 2,4\n"
-                     " jnz LABEL\n" 
-                     :
-                     : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
-                     : "r2");
-       __cdump("after KLMD");
+                 " jnz LABEL\n"
+                 :
+                 : "{r0}"(r0), "{r1}"(r1), "{r4}"(r4), "{r5}"(r5)
+                 : "memory");
+
 #endif
-   exit(8);
+
    printf ("KLMD-SHA-512: KLMD instruction completed\n");
-   memcpy (digest, parameter_block.h, SHA512_DIGEST_LENGTH);
+   memcpy (digest, parameter_block.H, SHA512_DIGEST_LENGTH);
    return 0;
 }
 
@@ -534,12 +587,12 @@ int naive_prng_generate (unsigned char *output, size_t length)
          value on each call, so each block (and thus each digest) differs. */
       memset (&data_block, 0, sizeof (data_block));
 
-      for (size_t i = 0; i < 13; ++i)
+      for (size_t i = 0; i < 16; ++i)
       {
          data_block.data[i] = z_stckf64 ();
       }
-      data_block.data[15] = 1024;
-      z_sha512_klmd ((unsigned char *) &data_block, sizeof (data_block), digest);
+   
+      z_sha512_klmd (&data_block, digest);
 
       size_t remaining = length - produced;
       size_t chunk = (remaining < SHA512_DIGEST_LENGTH) ? remaining : SHA512_DIGEST_LENGTH;
