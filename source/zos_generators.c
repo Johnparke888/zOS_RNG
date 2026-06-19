@@ -1,28 +1,35 @@
 #define _XOPEN_SOURCE 600
 #define _OPEN_SYS_FILE_EXT 1
 #define _OPEN_MSGQ_EXT 1
-#ifndef __MVS__
-// #error "This file targets z/OS USS only."
-#define __ptr32
-void __stckf (unsigned long long *result);
-#include <cstdint>
-#endif
+
 #include <errno.h>
-#include <stddef.h>
-#ifdef __MVS__
-#include <builtins.h> /* __stckf */
-#include <ctest.h>
-#endif
-#include <psa.h>
+#include <fcntl.h>        // Required for O_RDONLY
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>        // Required for O_RDONLY
+#include <time.h>
 #include <unistd.h>       // Required for close()
 
+
+#ifdef __MVS__
+#include <builtins.h> /* __stckf */
+#include <ctest.h>
+#include <psa.h>
+#endif
+
+#ifndef __MVS__
+// #error "This file targets z/OS USS only."
+#define __ptr32
+#endif
+
 #include "zos_generators.h"
+       // clock_gettime, struct timespec
+
+static int naive_counter = 0;
+
 
 // XL-specific NR parameter constraint:
 // https://www.ibm.com/docs/en/zos/2.4.0?topic=statements-inline-assembly-extension
@@ -40,7 +47,7 @@ static int cached = -1; /* Cache the result of the PRNO-TRNG check. -1 = not yet
  * signal. Loop until the whole buffer is filled. EINTR is retried; a return
  * of 0 (EOF) from /dev/urandom is abnormal and is treated as a failure.
  */
-static int read_full (int fd, unsigned char *output_buffer, size_t number_of_bytes_requested)
+int read_full (int fd, unsigned char *output_buffer, size_t number_of_bytes_requested)
 {
    size_t total_retrieved = 0;
    while (total_retrieved < number_of_bytes_requested)
@@ -114,13 +121,17 @@ int test_function_code (struct Parm_Block *parm_block, int function)
 int prno_trng_installed ()
 {
 
+#ifdef __linux__
+   return 1;
+#endif
+#ifdef __MVS__
    struct psa *__ptr32 psa_ptr = 0; /* PSA is always at virtual address 0. */
    /* Gate 1: facility indicator in the PSA. 0x40 at byte 207. */
    if (!(0x40 & psa_ptr->flcfacl7))
    {
       return false;
    }
-
+#endif
    /* Gate 2: PRNO Query. Parameter parm_block is 16 random_data for function 0. */
 
    /* For Query, GR0 = function code 0 and GR1 = parm-parm_block address; the
@@ -179,7 +190,7 @@ int prno_trng_installed ()
  *
  */
 
-
+#ifdef __MVS__
 void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
 {
    /* First operand (raw random_data) is unused; pin it to defined values. */
@@ -196,16 +207,16 @@ void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
 #else
    /* R1 = GR8/GR9 (raw, len 0), R2 = GR10/GR11 (output_buffer, size).
     */
-#ifdef __MVS__
+
    __asm__ volatile (" prno 8,10\n"
                      " jo *-4\n"
                      : "+{r10}"(output_buffer_ptr), "+{r11}"(size)
                      : "{r0}"((unsigned long) PRNO_TRNG), "{r8}"(raw_addr), "{r9}"(raw_length)
                      : "memory");
-#endif
+
 #endif
 }
-
+#endif
 /* ------------------------------------------------------------------------ *
  * Fallback path: CPU timing-jitter entropy (only used pre-z14).
  *
@@ -258,9 +269,9 @@ void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
 
 unsigned char jitter_sample_byte (int shift)
 {
-   unsigned long long start_time;
-   unsigned long long t0;
-   unsigned long long accumulator = 0;
+   unsigned long long int start_time;
+   unsigned long long int t0;
+   unsigned long long int accumulator = 0;
    int i = 0;
 #ifdef __MVS__
    //__asm__ [volatile] ( template : outputs : inputs : clobbers );
@@ -268,7 +279,7 @@ unsigned char jitter_sample_byte (int shift)
    // CALLDISP branch=no, sets r15 to 0 then issues SVC 137
    __asm__ volatile (" la 15,0\n svc 137\n" ::: "r15", "r6");
 #endif
-   (void) __stckf (&start_time);
+   __stckf (&start_time);
 
    start_time >>= shift;
    // Up to 400 iterations of SVC+STCKF
@@ -279,7 +290,7 @@ unsigned char jitter_sample_byte (int shift)
 #ifdef __MVS__
       __asm__ volatile (" la 15,0\n svc 137\n" ::: "r15", "r6");       // r15 and r6 are clobber register
 #endif
-      (void) __stckf (&t0);
+      __stckf (&t0);
       t0 >>= shift;
       if ((t0 - start_time) > 0xfffff)
       {
@@ -386,8 +397,7 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
    }
 }
 
-#define KLMD_FC_SHA512 3u
-#define SHA512_DIGEST_LENGTH 64u
+
 
 /*
  * KLMD-SHA-512 parameter block:
@@ -400,11 +410,11 @@ void jitter_fill (unsigned char *output_buffer_ptr, size_t size)
 struct sha512_klmd_parm
 {
    unsigned long long H[8];
-   unsigned long long block_length_high;   // High 64 bits of total bit count
-   unsigned long long block_length_low;    // bit length
+   unsigned long long block_length_high;       // High 64 bits of total bit count
+   unsigned long long block_length_low;        // bit length
 };
 
-static const sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
+static const struct sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                       0xbb67ae8584caa73bULL,
                                                       0x3c6ef372fe94f82bULL,
                                                       0xa54ff53a5f1d36f1ULL,
@@ -414,16 +424,11 @@ static const sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
                                                       0x5be0cd19137e2179ULL}};
 
 
-static int naive_counter = 0;
 
-struct DataBlock
-{
-   unsigned long long data[16];
-};
 /*
  * Store Clock Fast: returns the 8-byte TOD clock value.
  */
-static inline unsigned long long z_stckf64 ()
+unsigned long long z_stckf64 ()
 {
    unsigned long long start_time = 0;
 
@@ -434,14 +439,14 @@ static inline unsigned long long z_stckf64 ()
 
 /*
 *
-* 
+*
 * COMPUTE LAST MESSAGE DIGEST
 * KLMD R1,R2 [RRE]
-* R1 and R2 do not represent specific general-purpose registers; they are positional notations for the first 
+* R1 and R2 do not represent specific general-purpose registers; they are positional notations for the first
 * and second register operands.
 * Here R1 is a positional designation, while GR1 is a specific register. The same applies to R2 and GR2.
 
-* 
+*
 * Operand register 1 (R1)is ignored.
 * The R2 field designates an even-odd pair of general registers and must designate an even-numbered register
 * other than general register 0.
@@ -497,13 +502,14 @@ static inline unsigned long long z_stckf64 ()
 * GR1 = pointer to parm block
 * GR4 = pointer to data block
 * GR5 = length of data block
-* 
+*
 * condition code 0 normal completion
 * condition code 3 partial completion
-* 
+*
 */
 
-static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIGEST_LENGTH])
+#ifdef __MVS__
+int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIGEST_LENGTH])
 {
 
    sha512_klmd_parm parameter_block;
@@ -518,9 +524,9 @@ static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIG
 
    memcpy (&parameter_block.H, &sha512_initial_parm, sizeof (sha512_initial_parm));
    parameter_block.block_length_high = 0;
-   parameter_block.block_length_low = sizeof(DataBlock) * 8ull;
+   parameter_block.block_length_low = sizeof (DataBlock) * 8ull;
 
-   //printf ("KLMD-SHA-512: input length = %zu bytes\n", sizeof (DataBlock));
+   // printf ("KLMD-SHA-512: input length = %zu bytes\n", sizeof (DataBlock));
 
 
    // R0 = Bit positions 57-63 of general register 0 contain the function code.
@@ -534,15 +540,15 @@ static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIG
    unsigned long long int r4 = (unsigned long long int) (uintptr_t) data_block;
    unsigned long long int r5 = sizeof (DataBlock);
 
-  
+
    //  print register values for debugging
-  // printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
+   // printf ("KLMD-SHA-512: R0 = %lu, R1 = 0x%lx, R2 = %lu, R4 = 0x%lx, R5 = %lu\n", r0, r1, r2, r4, r5);
 
    /*
     * Format of any asm statement is:
     * asm volatile ("instruction" : output_operands : input_operands : clobbers);
     */
-#ifdef __MVS__
+
    /* GR0=FC, GR1=parm (architecture-mandated); operand-2 pair held in
       GR2/GR3 â volatile under XPLINK and usable under standard linkage.
       R1 field is ignored, so 0 is fine. */
@@ -551,13 +557,12 @@ static int z_sha512_klmd (DataBlock *data_block, unsigned char digest[SHA512_DIG
                  : "+{r2}"(r4), "+{r3}"(r5)
                  : "{r0}"(r0), "{r1}"(r1)
                  : "memory", "cc");
-#endif
 
-   
+
    memcpy (digest, parameter_block.H, SHA512_DIGEST_LENGTH);
    return 0;
 }
-
+#endif
 
 /*
  * Public function.
@@ -593,7 +598,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
       {
          data_block.data[i] = z_stckf64 ();
       }
-   
+
       z_sha512_klmd (&data_block, digest);
 
       size_t remaining = length - produced;
@@ -628,7 +633,7 @@ int bad_hash_counter_generate (unsigned char *output, size_t length)
 
    while (produced < length)
    {
-      struct DataBlock data_block{};
+      struct DataBlock data_block;
       unsigned char digest[SHA512_DIGEST_LENGTH];
 
       data_block.data[0] = counter++;

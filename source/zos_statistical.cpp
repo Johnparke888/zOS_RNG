@@ -1,13 +1,15 @@
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <sstream>
-#include <cstdio>
-#include <iostream>
-#include <filesystem>
-#include "zos_statistical.h"
-#include "matrix.h"
 
+#include "matrix.h"
+#include "zos_statistical.h"
+
+
+/*
+This code was take from NIST STS 2.1.2 Statistical Test Suite, and modified to be used in this project. The original code can be found at
+https://csrc.nist.gov/projects/random-bit-generation/documentation-and-software.
+
+A much improved version of the NIST STS is available at:
+https://github.com/arcetri/sts
+*/
 
 template <typename T> constexpr bool isNonPositive (T x) noexcept
 {
@@ -34,24 +36,37 @@ template <typename T> constexpr bool isOne (T x) noexcept
    return x == T{1};
 }
 
-constexpr int MAXNUMOFTEMPLATES = 148; /* APERIODIC TEMPLATES: 148=>temp_length=9 */     
+constexpr int MAXNUMOFTEMPLATES = 148; /* APERIODIC TEMPLATES: 148=>temp_length=9 */
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                          G L O B A L  C O N S T A N T S
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-constexpr double ALPHA = 0.01; /* SIGNIFICANCE LEVEL */
-                                                                                             \
+
+
 constexpr double rel_error = 1e-12;
 
 constexpr double MACHEP = 1.11022302462515654042E-16;        // 2**-53
 constexpr double MAXLOG = 7.09782712893383996732224E2;       // log(MAXNUM)
 constexpr double MAXNUM = 1.7976931348623158E308;            // 2**1024*(1-MACHEP)
 constexpr double PI = 3.14159265358979323846;                // pi, duh!
-
+constexpr double MAXLGM = 2.556348e305;
 static double big = 4.503599627370496e15;
 static double biginv = 2.22044604925031308085e-16;
 
 int sgngam = 0;
+
+/* A[]: Stirling's formula expansion of log gamma
+ * B[], C[]: log gamma function between 2 and 3
+ */
+constexpr unsigned short A[] = {0x6661, 0x2733, 0x9850, 0x3f4a, 0xe943, 0xb580, 0x7fbd, 0xbf43, 0x5ebb, 0x20dc,
+                             0x019f, 0x3f4a, 0xa5a1, 0x16b0, 0xc16c, 0xbf66, 0x554b, 0x5555, 0x5555, 0x3fb5};
+constexpr unsigned short B[] = {0x6761, 0x8ff3, 0x8901, 0xc095, 0xb93e, 0x355b, 0xf234, 0xc0e2, 0x89e5, 0xf890, 0x3d73, 0xc114,
+                             0xdb51, 0xf994, 0xbc82, 0xc131, 0xf20b, 0x0219, 0x4589, 0xc13a, 0x055e, 0x5418, 0x0c67, 0xc12a};
+constexpr unsigned short C[] = {
+    /*0x0000,0x0000,0x0000,0x3ff0,*/
+    0x12b2, 0x1cf3, 0xfd0d, 0xc075, 0xd757, 0x7b89, 0xaa0d, 0xc0d0, 0x4c9b, 0xb974, 0xeb84, 0xc10a,
+    0x0043, 0x7195, 0x6286, 0xc131, 0xf34c, 0x892f, 0x5255, 0xc143, 0xe14a, 0x6a11, 0xce4b, 0xc13e};
+
 extern unsigned char *epsilon;
 
 
@@ -82,14 +97,14 @@ double cephes_igamc (double a, double x)
       return (1.e0 - cephes_igam (a, x));
    }
 
-   ax = a * log (x) - x - cephes_lgam (a);
+   ax = a * std::log (x) - x - cephes_lgam (a);
 
    if (ax < -MAXLOG)
    {
-      std::printf ("igamc: UNDERFLOW\n");
+      //  // std::printf ("igamc: UNDERFLOW\n");
       return 0.0;
    }
-   ax = exp (ax);
+   ax = std::exp (ax);
 
    /* continued fraction */
    y = 1.0 - a;
@@ -150,13 +165,13 @@ double cephes_igam (double a, double x)
    }
 
    /* Compute  x**a * exp(-x) / gamma(a)  */
-   ax = a * log (x) - x - cephes_lgam (a);
+   ax = a * std::log (x) - x - cephes_lgam (a);
    if (ax < -MAXLOG)
    {
-      std::printf ("igam: UNDERFLOW\n");
+      // // std::printf ("igam: UNDERFLOW\n");
       return 0.0;
    }
-   ax = exp (ax);
+   ax = std::exp (ax);
 
    /* power series */
    r = a;
@@ -177,7 +192,112 @@ double cephes_igam (double a, double x)
 /* Logarithm of gamma function */
 double cephes_lgam (double x)
 {
-   return lgamma (x);
+   double p, q, u, w, z;
+   int i;
+
+   sgngam = 1;
+
+   if (x < -34.0)
+   {
+      q = -x;
+      w = cephes_lgam (q); /* note this modifies sgngam! */
+      p = std::floor (q);
+      if (p == q)
+      {
+      lgsing:
+         goto loverf;
+      }
+      i = (int) p;
+      if ((i & 1) == 0)
+      {
+         sgngam = -1;
+      }
+      else
+      {
+         sgngam = 1;
+      }
+      z = q - p;
+      if (z > 0.5)
+      {
+         p += 1.0;
+         z = p - q;
+      }
+      z = q * std::sin (PI * z);
+      if (z == 0.0)
+      {
+         goto lgsing;
+      }
+      /*      z = log(PI) - log( z ) - w;*/
+      z = std::log (PI) - std::log (z) - w;
+      return z;
+   }
+
+   if (x < 13.0)
+   {
+      z = 1.0;
+      p = 0.0;
+      u = x;
+      while (u >= 3.0)
+      {
+         p -= 1.0;
+         u = x + p;
+         z *= u;
+      }
+      while (u < 2.0)
+      {
+         if (u == 0.0)
+         {
+            goto lgsing;
+         }
+         z /= u;
+         p += 1.0;
+         u = x + p;
+      }
+      if (z < 0.0)
+      {
+         sgngam = -1;
+         z = -z;
+      }
+      else
+      {
+         sgngam = 1;
+      }
+      if (u == 2.0)
+      {
+         return (std::log (z));
+      }
+      p -= 2.0;
+      x = x + p;
+      p = x * cephes_polevl (x, (double *) B, 5) / cephes_p1evl (x, (double *) C, 6);
+
+      return std::log (z) + p;
+   }
+
+   if (x > MAXLGM)
+   {
+   loverf:
+     // printf ("lgam: OVERFLOW\n");
+
+      return sgngam * MAXNUM;
+   }
+
+   q = (x - 0.5) * std::log (x) - x + std::log (std::sqrt (2 * PI));
+   if (x > 1.0e8)
+   {
+      return q;
+   }
+
+   p = 1.0 / (x * x);
+   if (x >= 1000.0)
+   {
+      q += ((7.9365079365079365079365e-4 * p - 2.7777777777777777777778e-3) * p + 0.0833333333333333333333) / x;
+   }
+   else
+   {
+      q += cephes_polevl (p, (double *) A, 4) / x;
+   }
+
+   return q;
 }
 
 double cephes_polevl (double x, double *coef, int N)
@@ -292,11 +412,33 @@ double cephes_normal (double x)
    return (result);
 }
 
+double Pr (int u, double eta)
+{
+   int l;
+   double sum, p;
+
+   if (u == 0)
+   {
+      p = exp (-eta);
+   }
+   else
+   {
+      sum = 0.0;
+      for (l = 1; l <= u; l++)
+      {
+         sum += std::exp (-eta - u * std::log (2) + l * std::log (eta) - cephes_lgam (l + 1) + cephes_lgam (u) - cephes_lgam (l) -
+                          cephes_lgam (u - l + 1));
+      }
+      p = sum;
+   }
+   return p;
+}
+
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                               R U N S  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void Runs (int n)
+double Runs (int n)
 {
    int S, k;
    double pi, V, erfc_arg, p_value;
@@ -313,9 +455,9 @@ void Runs (int n)
 
    if (std::fabs (pi - 0.5) > (2.0 / std::sqrt (n)))
    {
-      std::printf ("    RUNS TEST\n");
-      std::printf ("  ------------------------------------------\n");
-      std::printf ("  PI ESTIMATOR CRITERIA NOT MET! PI = %f\n", pi);
+      // std::printf ("    RUNS TEST\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  PI ESTIMATOR CRITERIA NOT MET! PI = %f\n", pi);
       p_value = 0.0;
    }
    else
@@ -333,23 +475,24 @@ void Runs (int n)
       erfc_arg = std::fabs (V - 2.0 * n * pi * (1 - pi)) / (2.0 * pi * (1 - pi) * std::sqrt (2 * n));
       p_value = erfc (erfc_arg);
 
-      std::printf ("    Runs Test\n");
-      std::printf ("  ------------------------------------------\n");
-      std::printf ("  Computational Information:\n");
-      std::printf ("  ------------------------------------------\n");
-      std::printf ("  (a) Pi                        = %f\n", pi);
-      std::printf ("  (b) V_n_obs (Total # of runs) = %d\n", (int) V);
-      std::printf ("  (c) V_n_obs - 2 n pi (1-pi)\n");
-      std::printf ("      -----------------------   = %f\n", erfc_arg);
-      std::printf ("        2 std::sqrt(2n) pi (1-pi)\n");
-      std::printf ("  ------------------------------------------\n");
+      // std::printf ("    Runs Test\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  Computational Information:\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  (a) Pi                        = %f\n", pi);
+      // std::printf ("  (b) V_n_obs (Total # of runs) = %d\n", (int) V);
+      // std::printf ("  (c) V_n_obs - 2 n pi (1-pi)\n");
+      // std::printf ("      -----------------------   = %f\n", erfc_arg);
+      // std::printf ("        2 std::sqrt(2n) pi (1-pi)\n");
+      // std::printf ("  ------------------------------------------\n");
       if (std::signbit (p_value) || isGreaterThanOne (p_value))
       {
-         std::printf ("WARNING:  P_VALUE Is Out Of Range.\n");
+         // std::printf ("WARNING:  P_VALUE Is Out Of Range.\n");
       }
 
-      std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+      // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
    }
+   return p_value;
 }
 
 
@@ -357,24 +500,30 @@ void Runs (int n)
                      R A N D O M  E X C U R S I O N S  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void RandomExcursions (int n)
+std::vector<double> RandomExcursions (int n)
 {
    int b, i, j, k, J, x;
    int cycleStart, cycleStop, *cycle = nullptr, *S_k = nullptr;
    constexpr int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
    int counter[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-   
-   double p_value, sum, constraint, nu[6][8];
-   
-  constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
-                      {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
-                      {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
-                      {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
-                      {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
 
-   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) || ((cycle = (int *) std::calloc (std::max (1000, n / 100), sizeof (int))) == nullptr))
+   double p_value = 0;
+   double sum = 0;
+   double constraint = 0;
+   double nu[6][8] = {{0}};
+
+   std::vector<double> p_values;
+
+   constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
+                                {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
+                                {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
+                                {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
+                                {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
+
+   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) ||
+       ((cycle = (int *) std::calloc (std::max (1000, n / 100), sizeof (int))) == nullptr))
    {
-      std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
+      // std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
       if (S_k != nullptr)
       {
          std::free (S_k);
@@ -383,7 +532,7 @@ void RandomExcursions (int n)
       {
          std::free (cycle);
       }
-      return;
+      return p_values;
    }
 
    J = 0; /* DETERMINE CYCLES */
@@ -396,10 +545,10 @@ void RandomExcursions (int n)
          J++;
          if (J > std::max (1000, n / 100))
          {
-            std::printf ("Error In Function randomExcursions:  Exceeding The Max Number Of Cycles Expected\n.");
+            // std::printf ("Error In Function randomExcursions:  Exceeding The Max Number Of Cycles Expected\n.");
             std::free (S_k);
             std::free (cycle);
-            return;
+            return p_values;
          }
          cycle[J] = i;
       }
@@ -410,29 +559,30 @@ void RandomExcursions (int n)
    }
    cycle[J] = n;
 
-   std::printf ("     Random Excursions Test\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
-   std::printf ("  (b) Sequence Length (n)  = %d\n", n);
+   // std::printf ("     Random Excursions Test\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
+   // std::printf ("  (b) Sequence Length (n)  = %d\n", n);
 
    constraint = std::max (0.005 * std::pow (n, 0.5), 500.0);
    if (J < constraint)
    {
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  Warning:  Test Not Applicable.  There Are An\n");
-      std::printf ("     Insufficient Number Of Cycles.\n");
-      std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  Warning:  Test Not Applicable.  There Are An\n");
+      // std::printf ("     Insufficient Number Of Cycles.\n");
+      // std::printf ("  ---------------------------------------------\n");
       for (i = 0; i < 8; i++)
       {
-        // std::printf ("%f\n", 0.0);
+         // std::printf ("%f\n", 0.0);
+         p_values.push_back (0.0);
       }
    }
    else
    {
-      std::printf ("  (c) Rejection Constraint = %f\n", constraint);
-      std::printf ("  -------------------------------------------\n");
+      // std::printf ("  (c) Rejection Constraint = %f\n", constraint);
+      // std::printf ("  -------------------------------------------\n");
 
       cycleStart = 0;
       cycleStop = cycle[1];
@@ -495,17 +645,18 @@ void RandomExcursions (int n)
 
          if (std::signbit (p_value) || isGreaterThanOne (p_value))
          {
-            std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+            // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
          }
 
-         std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
-      
+         // std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
+         p_values.push_back (p_value);
       }
    }
-   std::printf ("\n");
+   // std::printf ("\n");
 
    std::free (S_k);
    std::free (cycle);
+   return p_values;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -513,7 +664,7 @@ void RandomExcursions (int n)
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
-void LongestRunOfOnes (int n)
+double LongestRunOfOnes (int n)
 {
    double pval, chi2, pi[7];
    int run, v_n_obs, N, i, j, K, M, V[7];
@@ -521,10 +672,10 @@ void LongestRunOfOnes (int n)
 
    if (n < 128)
    {
-      std::printf ("     Longest Runs Of Ones Test\n");
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("     n=%d is too short\n", n);
-      return;
+      // std::printf ("     Longest Runs Of Ones Test\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("     n=%d is too short\n", n);
+      return 0.0;
    }
    if (n < 6272)
    {
@@ -621,38 +772,39 @@ void LongestRunOfOnes (int n)
 
    pval = cephes_igamc ((double) (K / 2.0), chi2 / 2.0);
 
-   std::printf ("     Longest Runs Of Ones Test\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  (a) N (# of substrings)  = %d\n", N);
-   std::printf ("  (b) M (Substring Length) = %d\n", M);
-   std::printf ("  (c) Chi^2                = %f\n", chi2);
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("        F R E Q U E N C Y\n");
-   std::printf ("  ---------------------------------------------\n");
+   // std::printf ("     Longest Runs Of Ones Test\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  (a) N (# of substrings)  = %d\n", N);
+   // std::printf ("  (b) M (Substring Length) = %d\n", M);
+   // std::printf ("  (c) Chi^2                = %f\n", chi2);
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("        Frequency\n");
+   // std::printf ("  ---------------------------------------------\n");
 
    if (K == 3)
    {
-      std::printf ("    <=1     2     3    >=4   P-value  Assignment");
-      std::printf ("\n   %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3]);
+      // std::printf ("    <=1     2     3    >=4   P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3]);
    }
    else if (K == 5)
    {
-      std::printf ("  <=4  5  6  7  8  >=9 P-value  Assignment");
-      std::printf ("\n   %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5]);
+      // std::printf ("  <=4  5  6  7  8  >=9 P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5]);
    }
    else
    {
-      std::printf ("  <=10  11  12  13  14  15 >=16 P-value  Assignment");
-      std::printf ("\n   %3d %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], nu[6]);
+      // std::printf ("  <=10  11  12  13  14  15 >=16 P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], nu[6]);
    }
    if (std::signbit (pval) || isGreaterThanOne (pval))
    {
-      std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+      // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
    }
 
-   std::printf ("%s  p_value = %f\n\n", pval < ALPHA ? "FAILURE" : "SUCCESS", pval);
+   // std::printf ("%s  p_value = %f\n\n", pval < ALPHA ? "FAILURE" : "SUCCESS", pval);
+   return pval;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -1432,7 +1584,7 @@ void __ogg_fdrfftf (int n, double *r, double *wsave, int *ifac)
    drftf1 (n, r, wsave, wsave + n, ifac);
 }
 
-void DiscreteFourierTransform (int n)
+double DiscreteFourierTransform (int n)
 {
    double p_value, upperBound, percentile, N_l, N_o, d, *m = nullptr, *X = nullptr, *wsave = nullptr;
 
@@ -1441,7 +1593,7 @@ void DiscreteFourierTransform (int n)
    if (((X = (double *) std::calloc (n, sizeof (double))) == nullptr) || ((wsave = (double *) std::calloc (2 * n, sizeof (double))) == nullptr) ||
        ((m = (double *) std::calloc (n / 2 + 1, sizeof (double))) == nullptr))
    {
-      std::printf ("  Unable to allocate working arrays for the DFT.\n");
+      // std::printf ("  Unable to allocate working arrays for the DFT.\n");
       if (X != nullptr)
       {
          std::free (X);
@@ -1454,7 +1606,7 @@ void DiscreteFourierTransform (int n)
       {
          std::free (m);
       }
-      return;
+      return 0.0;
    }
    for (i = 0; i < n; i++)
    {
@@ -1485,27 +1637,28 @@ void DiscreteFourierTransform (int n)
    d = (N_l - N_o) / std::sqrt (n / 4.0 * 0.95 * 0.05);
    p_value = erfc (std::fabs (d) / std::sqrt (2.0));
 
-   std::printf ("    FFT Test\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  (a) Percentile = %f\n", percentile);
-   std::printf ("  (b) N_l        = %f\n", N_l);
-   std::printf ("  (c) N_o        = %f\n", N_o);
-   std::printf ("  (d) d          = %f\n", d);
-   std::printf ("  -------------------------------------------\n");
+   // std::printf ("    FFT Test\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  (a) Percentile = %f\n", percentile);
+   // std::printf ("  (b) N_l        = %f\n", N_l);
+   // std::printf ("  (c) N_o        = %f\n", N_o);
+   // std::printf ("  (d) d          = %f\n", d);
+   // std::printf ("  -------------------------------------------\n");
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
    std::free (X);
    std::free (wsave);
    std::free (m);
+   return p_value;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                 A P P R O X I M A T E  E N T R O P Y   T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void ApproximateEntropy (int m, int n)
+double ApproximateEntropy (int m, int n)
 {
    int i = 0;
    int j = 0;
@@ -1523,11 +1676,11 @@ void ApproximateEntropy (int m, int n)
    double p_value = 0;
    unsigned int *P = nullptr;
 
-   std::printf ("   Approximate Entropy Test\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  (a) m (block length)    = %d\n", m);
+   // std::printf ("   Approximate Entropy Test\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (a) m (block length)    = %d\n", m);
 
    seqLength = n;
    r = 0;
@@ -1545,8 +1698,8 @@ void ApproximateEntropy (int m, int n)
          powLen = (int) std::pow (2, blockSize + 1) - 1;
          if ((P = (unsigned int *) std::calloc (powLen, sizeof (unsigned int))) == nullptr)
          {
-            std::printf ("ApEn:  Insufficient memory available.\n");
-            return;
+            // std::printf ("ApEn:  Insufficient memory available.\n");
+            return 0.0;
          }
          for (i = 1; i < powLen - 1; i++)
          {
@@ -1587,29 +1740,31 @@ void ApproximateEntropy (int m, int n)
    chi_squared = 2.0 * seqLength * (log (2) - apen);
    p_value = cephes_igamc (std::pow (2, m - 1), chi_squared / 2.0);
 
-   std::printf ("  (b) n (sequence length) = %d\n", seqLength);
-   std::printf ("  (c) Chi^2               = %f\n", chi_squared);
-   std::printf ("  (d) Phi(m)	       = %f\n", ApEn[0]);
-   std::printf ("  (e) Phi(m+1)	       = %f\n", ApEn[1]);
-   std::printf ("  (f) ApEn                = %f\n", apen);
-   std::printf ("  (g) Log(2)              = %f\n", std::log (2.0));
-   std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (b) n (sequence length) = %d\n", seqLength);
+   // std::printf ("  (c) Chi^2               = %f\n", chi_squared);
+   // std::printf ("  (d) Phi(m)	       = %f\n", ApEn[0]);
+   // std::printf ("  (e) Phi(m+1)	       = %f\n", ApEn[1]);
+   // std::printf ("  (f) ApEn                = %f\n", apen);
+   // std::printf ("  (g) Log(2)              = %f\n", std::log (2.0));
+   // std::printf ("  --------------------------------------------\n");
 
    if (m > (int) (std::log (seqLength) / std::log (2) - 5))
    {
-      std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) - 5)));
-      std::printf ("  Results are inaccurate!\n");
-      std::printf ("  --------------------------------------------\n");
+      // std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) - 5)));
+      // std::printf ("  Results are inaccurate!\n");
+      // std::printf ("  --------------------------------------------\n");
    }
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+
+   return p_value;
 }
 /* ======================================================================== *
  * Test harness:  ibm-clang++ -m64 -D ZOS_GETENTROPY_TEST ...
  * ======================================================================== */
 
 
-void Frequency (int n)
+double Frequency (int n)
 {
    int i = 0;
    double f = 0;
@@ -1627,20 +1782,21 @@ void Frequency (int n)
    f = s_obs / sqrt2;
    p_value = erfc (f);
 
-   std::printf ("         Frequency Test\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  (a) The nth partial sum = %d\n", (int) sum);
-   std::printf ("  (b) S_n/n               = %f\n", sum / n);
-   std::printf ("  ---------------------------------------------\n");
+   // std::printf ("         Frequency Test\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  (a) The nth partial sum = %d\n", (int) sum);
+   // std::printf ("  (b) S_n/n               = %f\n", sum / n);
+   // std::printf ("  ---------------------------------------------\n");
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   return p_value;
 }
 
 
 
-void Serial (int m, int n)
+std::pair<double, double> Serial (int m, int n)
 {
    double p_value1 = 0;
    double p_value2 = 0;
@@ -1658,28 +1814,30 @@ void Serial (int m, int n)
    p_value1 = cephes_igamc (std::pow (2, m - 1) / 2, del1 / 2.0);
    p_value2 = cephes_igamc (std::pow (2, m - 2) / 2, del2 / 2.0);
 
-   std::printf ("          Serial Test\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("   Computational Information:		  \n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  (a) Block length    (m) = %d\n", m);
-   std::printf ("  (b) Sequence length (n) = %d\n", n);
-   std::printf ("  (c) Psi_m               = %f\n", psim0);
-   std::printf ("  (d) Psi_m-1             = %f\n", psim1);
-   std::printf ("  (e) Psi_m-2             = %f\n", psim2);
-   std::printf ("  (f) Del_1               = %f\n", del1);
-   std::printf ("  (g) Del_2               = %f\n", del2);
-   std::printf ("  ---------------------------------------------\n");
+   // std::printf ("          Serial Test\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("   Computational Information:		  \n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  (a) Block length    (m) = %d\n", m);
+   // std::printf ("  (b) Sequence length (n) = %d\n", n);
+   // std::printf ("  (c) Psi_m               = %f\n", psim0);
+   // std::printf ("  (d) Psi_m-1             = %f\n", psim1);
+   // std::printf ("  (e) Psi_m-2             = %f\n", psim2);
+   // std::printf ("  (f) Del_1               = %f\n", del1);
+   // std::printf ("  (g) Del_2               = %f\n", del2);
+   // std::printf ("  ---------------------------------------------\n");
 
-   std::printf ("%s  p_value1 = %f\n", p_value1 < ALPHA ? "FAILURE" : "SUCCESS", p_value1);
-   std::printf ("%s  p_value2 = %f\n\n", p_value2 < ALPHA ? "FAILURE" : "SUCCESS", p_value2);
+   // std::printf ("%s  p_value1 = %f\n", p_value1 < ALPHA ? "FAILURE" : "SUCCESS", p_value1);
+   // std::printf ("%s  p_value2 = %f\n\n", p_value2 < ALPHA ? "FAILURE" : "SUCCESS", p_value2);
+
+   return std::make_pair (p_value1, p_value2);
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                     C U M U L A T I V E  S U M S  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void CumulativeSums (int n)
+std::pair<double, double> CumulativeSums (int n)
 {
    int S, sup, inf, z, zrev, k;
    double sum1, sum2, p_value;
@@ -1687,7 +1845,7 @@ void CumulativeSums (int n)
    S = 0;
    sup = 0;
    inf = 0;
-
+   std::pair<double, double> p_values;
    for (k = 0; k < n; k++)
    {
       epsilon[k] ? S++ : S--;
@@ -1719,19 +1877,20 @@ void CumulativeSums (int n)
 
    p_value = 1.0 - sum1 + sum2;
 
-   std::printf ("        Cumulative Sums (Forward) Test\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  (a) The maximum partial sum = %d\n", z);
-   std::printf ("  -------------------------------------------\n");
+   // std::printf ("        Cumulative Sums (Forward) Test\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  (a) The maximum partial sum = %d\n", z);
+   // std::printf ("  -------------------------------------------\n");
 
    if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
-      std::printf ("  Warning:  P_Value Is Out Of Range\n");
+      // std::printf ("  Warning:  P_Value Is Out Of Range\n");
    }
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   p_values.first = p_value;
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
    // backwards
    sum1 = 0.0;
@@ -1748,19 +1907,21 @@ void CumulativeSums (int n)
    }
    p_value = 1.0 - sum1 + sum2;
 
-   std::printf ("        Cumulative Sums (Reverse) Test\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  -------------------------------------------\n");
-   std::printf ("  (a) The maximum partial sum = %d\n", zrev);
-   std::printf ("  -------------------------------------------\n");
+   // std::printf ("        Cumulative Sums (Reverse) Test\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  -------------------------------------------\n");
+   // std::printf ("  (a) The maximum partial sum = %d\n", zrev);
+   // std::printf ("  -------------------------------------------\n");
 
    if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
-      std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE\n");
+      // std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE\n");
    }
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   p_values.second = p_value;
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   return p_values;
 }
 
 double psi2 (int m, int n)
@@ -1777,7 +1938,7 @@ double psi2 (int m, int n)
    powLen = (int) std::pow (2, m + 1) - 1;
    if ((P = (unsigned int *) std::calloc (powLen, sizeof (unsigned int))) == nullptr)
    {
-      std::printf ("Serial Test:  Insufficient memory available.\n");
+      // std::printf ("Serial Test:  Insufficient memory available.\n");
       return 0.0;
    }
    for (i = 1; i < powLen - 1; i++)
@@ -1816,7 +1977,7 @@ double psi2 (int m, int n)
                          U N I V E R S A L  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void Universal (int n)
+double Universal (int n)
 {
    int i, j, p, L, Q, K;
    double arg, sqrt2, sigma, phi, sum, p_value, c;
@@ -1881,12 +2042,12 @@ void Universal (int n)
    p = (int) std::pow (2, L);
    if ((L < 6) || (L > 16) || ((double) Q < 10 * std::pow (2, L)) || ((T = (long *) std::calloc (p, sizeof (long))) == nullptr))
    {
-      std::printf ("  Universal Statistical Test\n");
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  ERROR:  L is out of range.\n");
-      std::printf ("  -OR- :  Q is less than %f.\n", 10 * std::pow (2, L));
-      std::printf ("  -OR- :  Unable to allocate T.\n");
-      return;
+      // std::printf ("  Universal Statistical Test\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  ERROR:  L is out of range.\n");
+      // std::printf ("  -OR- :  Q is less than %f.\n", 10 * std::pow (2, L));
+      // std::printf ("  -OR- :  Unable to allocate T.\n");
+      return 0.0;
    }
 
    /* COMPUTE THE EXPECTED:  Formula 16, in Marsaglia's Paper */
@@ -1919,48 +2080,52 @@ void Universal (int n)
    }
    phi = (double) (sum / (double) K);
 
-   std::printf ("  Universal Statistical Test\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  (a) L         = %d\n", L);
-   std::printf ("  (b) Q         = %d\n", Q);
-   std::printf ("  (c) K         = %d\n", K);
-   std::printf ("  (d) sum       = %f\n", sum);
-   std::printf ("  (e) sigma     = %f\n", sigma);
-   std::printf ("  (f) variance  = %f\n", variance[L]);
-   std::printf ("  (g) exp_value = %f\n", expected_value[L]);
-   std::printf ("  (h) phi       = %f\n", phi);
-   std::printf ("  (i) WARNING:  %d bits were discarded.\n", n - (Q + K) * L);
-   std::printf ("  -----------------------------------------\n");
+   // std::printf ("  Universal Statistical Test\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (a) L         = %d\n", L);
+   // std::printf ("  (b) Q         = %d\n", Q);
+   // std::printf ("  (c) K         = %d\n", K);
+   // std::printf ("  (d) sum       = %f\n", sum);
+   // std::printf ("  (e) sigma     = %f\n", sigma);
+   // std::printf ("  (f) variance  = %f\n", variance[L]);
+   // std::printf ("  (g) exp_value = %f\n", expected_value[L]);
+   // std::printf ("  (h) phi       = %f\n", phi);
+   // std::printf ("  (i) WARNING:  %d Bits Were Discarded.\n", n - (Q + K) * L);
+   // std::printf ("  -----------------------------------------\n");
 
    arg = std::fabs (phi - expected_value[L]) / (sqrt2 * sigma);
    p_value = std::erfc (arg);
 
    if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
-      std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE\n");
+      // std::printf ("  WARNING: P_VALUE IS OUT OF RANGE\n");
    }
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
    std::free (T);
+
+   return p_value;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
             R A N D O M  E X C U R S I O N S  V A R I A N T  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void RandomExcursionsVariant (int n)
+std::vector<double> RandomExcursionsVariant (int n)
 {
    int i, p, J, x, constraint, count, *S_k;
    constexpr int stateX[18] = {-9, -8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9};
    double p_value;
 
+   std::vector<double> p_values;
+
    if ((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr)
    {
-      std::printf ("  RANDOM EXCURSIONS VARIANT: Insufficient memory allocated.\n");
-      return;
+      // std::printf ("  RANDOM EXCURSIONS VARIANT: Insufficient memory allocated.\n");
+      return p_values;
    }
    J = 0;
    S_k[0] = 2 * (int) epsilon[0] - 1;
@@ -1977,23 +2142,24 @@ void RandomExcursionsVariant (int n)
       J++;
    }
 
-   std::printf ("   Random Excursions Variant Test\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  --------------------------------------------\n");
-   std::printf ("  (a) Number Of Cycles (J) = %d\n", J);
-   std::printf ("  (b) Sequence Length (n)  = %d\n", n);
-   std::printf ("  --------------------------------------------\n");
+   // std::printf ("   Random Excursions Variant Test\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (a) Number Of Cycles (J) = %d\n", J);
+   // std::printf ("  (b) Sequence Length (n)  = %d\n", n);
+   // std::printf ("  --------------------------------------------\n");
 
    constraint = (int) std::max (0.005 * std::pow (n, 0.5), 500.0);
    if (J < constraint)
    {
-      std::printf ("\n  Warning:  Test Not Applicable. There are an\n");
-      std::printf ("     Insufficient Number Of Cycles.\n");
-      std::printf ("  ---------------------------------------------\n");
+      // std::printf ("\n  Warning:  Test Not Applicable. There are an\n");
+      // std::printf ("     Insufficient Number Of Cycles.\n");
+      // std::printf ("  ---------------------------------------------\n");
       for (i = 0; i < 18; i++)
       {
-        // std::printf ("%f\n", 0.0);
+         // std::printf ("%f\n", 0.0);
+         p_values.push_back (0.0);
       }
    }
    else
@@ -2013,15 +2179,17 @@ void RandomExcursionsVariant (int n)
 
          if (std::signbit (p_value) || isGreaterThanOne (p_value))
          {
-            std::printf ("  (b) WARNING: P_VALUE IS OUT OF RANGE.\n");
+            // std::printf ("  (b) WARNING: P_VALUE IS OUT OF RANGE.\n");
          }
-         std::printf ("%s  ", p_value < ALPHA ? "FAILURE" : "SUCCESS");
-         std::printf ("(x = %2d) Total visits = %4d; p-value = %f\n", x, count, p_value);
+         // std::printf ("%s  ", p_value < ALPHA ? "FAILURE" : "SUCCESS");
+         // std::printf ("(x = %2d) Total visits = %4d; p-value = %f\n", x, count, p_value);
+         p_values.push_back (p_value);
       }
    }
-   std::printf ("\n");
-
+   // std::printf ("\n");
    std::free (S_k);
+
+   return p_values;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -2029,13 +2197,13 @@ void RandomExcursionsVariant (int n)
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
-void OverlappingTemplateMatchings (int m, int n)
+double OverlappingTemplateMatchings (int m, int n)
 {
    int i, k, match;
    double W_obs, eta, sum, chi2, p_value, lambda;
    int M, N, j, K = 5;
    unsigned int nu[6] = {0, 0, 0, 0, 0, 0};
-  // double	pi[6] = { 0.143783, 0.139430, 0.137319, 0.124314, 0.106209, 0.348945 };
+   // double	pi[6] = { 0.143783, 0.139430, 0.137319, 0.124314, 0.106209, 0.348945 };
    double pi[6] = {0.364091, 0.185659, 0.139381, 0.100571, 0.0704323, 0.139865};
    unsigned char *sequence;
 
@@ -2044,9 +2212,9 @@ void OverlappingTemplateMatchings (int m, int n)
 
    if ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr)
    {
-      std::printf ("      Overlapping Template Of All Ones Test\n");
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  TEMPLATE DEFINITION:  Insufficient memory, Overlapping Template Matchings test aborted!\n");
+      // std::printf ("      Overlapping Template Of All Ones Test\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  TEMPLATE DEFINITION:  Insufficient memory, Overlapping Template Matchings test aborted!\n");
    }
    else
    {
@@ -2101,51 +2269,32 @@ void OverlappingTemplateMatchings (int m, int n)
       sum += nu[i];
    }
    p_value = cephes_igamc (K / 2.0, chi2 / 2.0);
-   std::printf ("      Overlapping Template Of All Ones Test\n");
-   std::printf ("  -----------------------------------------------\n");
-   std::printf ("  Computational Information:\n");
-   std::printf ("  -----------------------------------------------\n");
-   std::printf ("  (a) n (sequence_length)      = %d\n", n);
-   std::printf ("  (b) m (block length of 1s)   = %d\n", m);
-   std::printf ("  (c) M (length of substring)  = %d\n", M);
-   std::printf ("  (d) N (number of substrings) = %d\n", N);
-   std::printf ("  (e) lambda [(M-m+1)/2^m]     = %f\n", lambda);
-   std::printf ("  (f) eta                      = %f\n", eta);
-   std::printf ("  -----------------------------------------------\n");
-   std::printf ("     Frequency\n");
-   std::printf ("    0   1   2   3   4 >=5   Chi^2   P-value  Assignment\n");
-   std::printf ("  -----------------------------------------------\n");
-   std::printf ("  %3d %3d %3d %3d %3d %3d  %f ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], chi2);
+   // std::printf ("      Overlapping Template Of All Ones Test\n");
+   // std::printf ("  -----------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  -----------------------------------------------\n");
+   // std::printf ("  (a) n (sequence_length)      = %d\n", n);
+   // std::printf ("  (b) m (block length of 1s)   = %d\n", m);
+   // std::printf ("  (c) M (length of substring)  = %d\n", M);
+   // std::printf ("  (d) N (number of substrings) = %d\n", N);
+   // std::printf ("  (e) lambda [(M-m+1)/2^m]     = %f\n", lambda);
+   // std::printf ("  (f) eta                      = %f\n", eta);
+   // std::printf ("  -----------------------------------------------\n");
+   // std::printf ("     Frequency\n");
+   // std::printf ("    0   1   2   3   4 >=5   Chi^2   P-value  Assignment\n");
+   // std::printf ("  -----------------------------------------------\n");
+   // std::printf ("  %3d %3d %3d %3d %3d %3d  %f ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], chi2);
 
    if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
-      std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+      // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
    }
 
    std::free (sequence);
-   std::printf ("%f %s\n\n", p_value, p_value < ALPHA ? "FAILURE" : "SUCCESS");
+   // std::printf ("%f %s\n\n", p_value, p_value < ALPHA ? "FAILURE" : "SUCCESS");
+   return p_value;
 }
 
-double Pr (int u, double eta)
-{
-   int l;
-   double sum, p;
-
-   if (u == 0)
-   {
-      p = exp (-eta);
-   }
-   else
-   {
-      sum = 0.0;
-      for (l = 1; l <= u; l++)
-      {
-         sum += std::exp (-eta - u * std::log (2) + l * std::log (eta) - cephes_lgam (l + 1) + cephes_lgam (u) - cephes_lgam (l) - cephes_lgam (u - l + 1));
-      }
-      p = sum;
-   }
-   return p;
-}
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
           N O N O V E R L A P P I N G  T E M P L A T E  T E S T
@@ -2154,10 +2303,11 @@ double Pr (int u, double eta)
 // Requires: #include <filesystem>  (C++17)
 //           #include <string>      (for std::to_string)
 
-void NonOverlappingTemplateMatchings (int m, int n)
+std::vector<double> NonOverlappingTemplateMatchings (int m, int n)
 {
-   int numOfTemplates[100] = {0, 0, 2, 4, 6, 12, 20, 40, 74, 148, 284, 568, 1116, 2232, 4424, 8848, 17622, 35244, 70340, 140680, 281076, 562152};
   
+    int numOfTemplates[100] = {0, 0, 2, 4, 6, 12, 20, 40, 74, 148, 284, 568, 1116, 2232, 4424, 8848, 17622, 35244, 70340, 140680, 281076, 562152};
+
    /*----------------------------------------------------------------------------
    NOTE:  Should additional templates lengths beyond 21 be desired, they must
    first be constructed, saved into files and then the corresponding
@@ -2165,19 +2315,19 @@ void NonOverlappingTemplateMatchings (int m, int n)
    position in the numOfTemplates variable.
    ----------------------------------------------------------------------------*/
    unsigned int bit, W_obs, nu[6], *Wj = nullptr;
-   FILE *fp = nullptr;
+   FILE *file_ptr = nullptr;
    double sum, chi2, p_value, lambda, pi[6], varWj;
    int i, j, jj, k, match, SKIP, M, N, K = 5;
    unsigned char *sequence = nullptr;
 
    N = 8;
    M = n / N;
-
+   std::vector<double> p_values;
    if ((Wj = (unsigned int *) std::calloc (N, sizeof (unsigned int))) == nullptr)
    {
       std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
       std::printf (" Insufficient memory for required work space.\n");
-      return;
+      return p_values;
    }
    lambda = (M - m + 1) / std::pow (2, m);
    varWj = M * (1.0 / std::pow (2.0, m) - (2.0 * m - 1.0) / std::pow (2.0, 2.0 * m));
@@ -2188,12 +2338,12 @@ void NonOverlappingTemplateMatchings (int m, int n)
    std::error_code ec;
 
    if (((std::signbit (lambda)) || (isZero (lambda))) || (!std::filesystem::exists (templatePath, ec)) ||
-       ((fp = fopen (templateStr.c_str (), "r")) == nullptr) || ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
+       ((file_ptr = fopen (templateStr.c_str (), "r")) == nullptr) || ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
    {
-      std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
-      std::printf (" Lambda (%f) not being positive!\n", lambda);
-      std::printf (" Template file <%s> not existing\n", templateStr.c_str ());
-      std::printf (" Insufficient memory for required work space.\n");
+      // std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
+      // std::printf (" Lambda (%f) not being positive!\n", lambda);
+      // std::printf (" Template file <%s> not existing\n", templateStr.c_str ());
+      // std::printf (" Insufficient memory for required work space.\n");
       if (sequence != nullptr)
       {
          std::free (sequence);
@@ -2201,15 +2351,15 @@ void NonOverlappingTemplateMatchings (int m, int n)
    }
    else
    {
-      std::printf ("    Non-Overlapping Templates Test\n");
-      std::printf ("-------------------------------------------------------------------------------------\n");
-      std::printf ("    Computational Information\n");
-      std::printf ("-------------------------------------------------------------------------------------\n");
-      std::printf (" LAMBDA = %f M = %d N = %d m = %d n = %d\n", lambda, M, N, m, n);
-      std::printf ("-------------------------------------------------------------------------------------\n");
-      std::printf ("  Frequency\n");
-      std::printf ("Template   W_1  W_2  W_3  W_4  W_5  W_6  W_7  W_8    Chi^2   P_value Assignment Index\n");
-      std::printf ("-------------------------------------------------------------------------------------\n");
+      // std::printf ("    Non-Overlapping Templates Test\n");
+      // std::printf ("-------------------------------------------------------------------------------------\n");
+      // std::printf ("    Computational Information\n");
+      // std::printf ("-------------------------------------------------------------------------------------\n");
+      // std::printf (" LAMBDA = %f M = %d N = %d m = %d n = %d\n", lambda, M, N, m, n);
+      // std::printf ("-------------------------------------------------------------------------------------\n");
+      // std::printf ("  Frequency\n");
+      // std::printf ("Template   W_1  W_2  W_3  W_4  W_5  W_6  W_7  W_8    Chi^2   P_value Assignment Index\n");
+      // std::printf ("-------------------------------------------------------------------------------------\n");
 
       if (numOfTemplates[m] < MAXNUMOFTEMPLATES)
       {
@@ -2241,11 +2391,11 @@ void NonOverlappingTemplateMatchings (int m, int n)
 
          for (k = 0; k < m; k++)
          {
-            std::fscanf (fp, "%d", &bit);
+            std::fscanf (file_ptr, "%d", &bit);
             sequence[k] = bit;
-            std::printf ("%d", sequence[k]);
+            // std::printf ("%d", sequence[k]);
          }
-         std::printf (" ");
+         // std::printf (" ");
          for (k = 0; k <= K; k++)
          {
             nu[k] = 0;
@@ -2278,11 +2428,11 @@ void NonOverlappingTemplateMatchings (int m, int n)
          {
             if (m == 10)
             {
-               std::printf ("%3d  ", Wj[i]);
+               // std::printf ("%3d  ", Wj[i]);
             }
             else
             {
-               std::printf ("%4d ", Wj[i]);
+               // std::printf ("%4d ", Wj[i]);
             }
             chi2 += std::pow (((double) Wj[i] - lambda) / std::pow (varWj, 0.5), 2);
          }
@@ -2293,31 +2443,34 @@ void NonOverlappingTemplateMatchings (int m, int n)
             std::printf ("  WARNING:  P_VALUE IS OUT OF RANGE.\n");
          }
 
-         std::printf ("%9.6f %f %s %3d\n", chi2, p_value, p_value < ALPHA ? "FAILURE" : "SUCCESS", jj);
+         // std::printf ("%9.6f %f %s %3d\n", chi2, p_value, p_value < ALPHA ? "FAILURE" : "SUCCESS", jj);
+         p_values.push_back (p_value);
+
          if (SKIP > 1)
          {
-            std::fseek (fp, (long) (SKIP - 1) * 2 * m, SEEK_CUR);
+            std::fseek (file_ptr, (long) (SKIP - 1) * 2 * m, SEEK_CUR);
          }
       }
    }
 
-   std::printf ("\n");
+   // std::printf ("\n");
    if (sequence != nullptr)
    {
       std::free (sequence);
    }
 
    std::free (Wj);
-   if (fp != nullptr)
+   if (file_ptr != nullptr)
    {
-      std::fclose (fp);
+      std::fclose (file_ptr);
    }
+   return p_values;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                    B L O C K  F R E Q U E N C Y  T E S T
+                    B L O C K  Frequency  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void BlockFrequency (int M, int n)
+double BlockFrequency (int M, int n)
 {
    int i, j, N, blockSum;
    double p_value, sum, pi, v, chi_squared;
@@ -2339,35 +2492,46 @@ void BlockFrequency (int M, int n)
    chi_squared = 4.0 * M * sum;
    p_value = cephes_igamc (N / 2.0, chi_squared / 2.0);
 
-   std::printf ("   BLOCK FREQUENCY TEST\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  COMPUTATIONAL INFORMATION:\n");
-   std::printf ("  ---------------------------------------------\n");
-   std::printf ("  (a) Chi^2           = %f\n", chi_squared);
-   std::printf ("  (b) # of substrings = %d\n", N);
-   std::printf ("  (c) block length    = %d\n", M);
-   std::printf ("  (d) Note: %d bits were discarded.\n", n % M);
-   std::printf ("  ---------------------------------------------\n");
+   // std::printf ("   Block Frequency Test\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  (a) Chi^2           = %f\n", chi_squared);
+   // std::printf ("  (b) # of substrings = %d\n", N);
+   // std::printf ("  (c) block length    = %d\n", M);
+   // std::printf ("  (d) Note: %d Bits Were Discarded.\n", n % M);
+   // std::printf ("  ---------------------------------------------\n");
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
-
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   return p_value;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
                               R A N K  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void Rank (int n)
+double Rank (int n)
 {
-  
-    int N, i, k, r;
-   double p_value, product, chi_squared, arg1, p_32, p_31, p_30, R, F_32, F_31, F_30;
+
+   int N, i, k, r;
+   double p_value = 0;
+   double product = 0;
+   double chi_squared = 0;
+   double arg1 = 0;
+   double p_32 = 0;
+   double p_31 = 0;
+   double p_30 = 0;
+   double R = 0;
+   double F_32 = 0;
+   double F_31 = 0;
+   double F_30 = 0;
+
    unsigned char **matrix = create_matrix (32, 32);
 
    N = n / (32 * 32);
    if (isZero (N))
    {
-      std::printf ("    RANK TEST\n");
-      std::printf ("  Error: Insufficient # Of Bits To Define An 32x32 (%dx%d) Matrix\n", 32, 32);
+      // std::printf ("    RANK TEST\n");
+      // std::printf ("  Error: Insufficient # Of Bits To Define An 32x32 (%dx%d) Matrix\n", 32, 32);
       p_value = 0.00;
    }
    else
@@ -2415,26 +2579,26 @@ void Rank (int n)
 
       arg1 = -chi_squared / 2.e0;
 
-      std::printf ("    RANK TEST\n");
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  COMPUTATIONAL INFORMATION:\n");
-      std::printf ("  ---------------------------------------------\n");
-      std::printf ("  (a) Probability P_%d = %f\n", 32, p_32);
-      std::printf ("  (b)             P_%d = %f\n", 31, p_31);
-      std::printf ("  (c)             P_%d = %f\n", 30, p_30);
-      std::printf ("  (d) Frequency   F_%d = %d\n", 32, (int) F_32);
-      std::printf ("  (e)             F_%d = %d\n", 31, (int) F_31);
-      std::printf ("  (f)             F_%d = %d\n", 30, (int) F_30);
-      std::printf ("  (g) # of matrices    = %d\n", N);
-      std::printf ("  (h) Chi^2            = %f\n", chi_squared);
-      std::printf ("  (i) NOTE: %d BITS WERE DISCARDED.\n", n % (32 * 32));
-      std::printf ("  ---------------------------------------------\n");
+      // std::printf ("    RANK TEST\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  COMPUTATIONAL INFORMATION:\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  (a) Probability P_%d = %f\n", 32, p_32);
+      // std::printf ("  (b)             P_%d = %f\n", 31, p_31);
+      // std::printf ("  (c)             P_%d = %f\n", 30, p_30);
+      // std::printf ("  (d) Frequency   F_%d = %d\n", 32, (int) F_32);
+      // std::printf ("  (e)             F_%d = %d\n", 31, (int) F_31);
+      // std::printf ("  (f)             F_%d = %d\n", 30, (int) F_30);
+      // std::printf ("  (g) # of matrices    = %d\n", N);
+      // std::printf ("  (h) Chi^2            = %f\n", chi_squared);
+      // std::printf ("  (i) Note: %d Bits Were Discarded.\n", n % (32 * 32));
+      // std::printf ("  ---------------------------------------------\n");
 
       p_value = std::exp (arg1);
 
       if (std::signbit (p_value) || isGreaterThanOne (p_value))
       {
-         std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+         // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
       }
 
       for (i = 0; i < 32; i++) /* DEALLOCATE MATRIX  */
@@ -2444,6 +2608,162 @@ void Rank (int n)
       std::free (matrix);
    }
 
-   std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
+   return p_value;
+}
+
+double LinearComplexity (int M, int n)
+{
+   int i, ii, j, d, N, L, m, N_, parity, sign, K = 6;
+   double p_value, T_, mean, nu[7], chi2;
+   constexpr double pi[7] = {0.01047, 0.03125, 0.12500, 0.50000, 0.25000, 0.06250, 0.020833};
+   unsigned char  *T = nullptr, *P = nullptr, *B_ = nullptr, *C = nullptr;
+
+   N = (int) std::floor (n / M);
+   if (((B_ = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) || ((C = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) ||
+       ((P = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) || ((T = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr))
+   {
+      printf ("Insufficient Memory for Work Space:: Linear Complexity Test\n");
+      if (B_ != nullptr)
+      {
+         std::free (B_);
+      }
+      if (C != nullptr)
+      {
+         std::free (C);
+      }
+      if (P != nullptr)
+      {
+         std::free (P);
+      }
+      if (T != nullptr)
+      {
+         std::free (T);
+      }
+      return 0.0;
+   }
+
+ 
+   for (i = 0; i < K + 1; i++)
+   {
+      nu[i] = 0.00;
+   }
+   for (ii = 0; ii < N; ii++)
+   {
+      for (i = 0; i < M; i++)
+      {
+         B_[i] = 0;
+         C[i] = 0;
+         T[i] = 0;
+         P[i] = 0;
+      }
+      L = 0;
+      m = -1;
+      d = 0;
+      C[0] = 1;
+      B_[0] = 1;
+
+      /* DETERMINE LINEAR COMPLEXITY */
+      N_ = 0;
+      while (N_ < M)
+      {
+         d = (int) epsilon[ii * M + N_];
+         for (i = 1; i <= L; i++)
+         {
+            d += C[i] * epsilon[ii * M + N_ - i];
+         }
+         d = d % 2;
+         if (d == 1)
+         {
+            for (i = 0; i < M; i++)
+            {
+               T[i] = C[i];
+               P[i] = 0;
+            }
+            for (j = 0; j < M; j++)
+            {
+               if (B_[j] == 1)
+               {
+                  P[j + N_ - m] = 1;
+               }
+            }
+            for (i = 0; i < M; i++)
+            {
+               C[i] = (C[i] + P[i]) % 2;
+            }
+            if (L <= N_ / 2)
+            {
+               L = N_ + 1 - L;
+               m = N_;
+               for (i = 0; i < M; i++)
+               {
+                  B_[i] = T[i];
+               }
+            }
+         }
+         N_++;
+      }
+      if ((parity = (M + 1) % 2) == 0)
+      {
+         sign = -1;
+      }
+      else
+      {
+         sign = 1;
+      }
+      mean = M / 2.0 + (9.0 + sign) / 36.0 - 1.0 / pow (2, M) * (M / 3.0 + 2.0 / 9.0);
+      if ((parity = M % 2) == 0)
+      {
+         sign = 1;
+      }
+      else
+      {
+         sign = -1;
+      }
+      T_ = sign * (L - mean) + 2.0 / 9.0;
+
+      if (T_ <= -2.5)
+      {
+         nu[0]++;
+      }
+      else if (T_ > -2.5 && T_ <= -1.5)
+      {
+         nu[1]++;
+      }
+      else if (T_ > -1.5 && T_ <= -0.5)
+      {
+         nu[2]++;
+      }
+      else if (T_ > -0.5 && T_ <= 0.5)
+      {
+         nu[3]++;
+      }
+      else if (T_ > 0.5 && T_ <= 1.5)
+      {
+         nu[4]++;
+      }
+      else if (T_ > 1.5 && T_ <= 2.5)
+      {
+         nu[5]++;
+      }
+      else
+      {
+         nu[6]++;
+      }
+   }
+   chi2 = 0.00;
+
+   for (i = 0; i < K + 1; i++)
+   {
+      chi2 += std::pow (nu[i] - N * pi[i], 2) / (N * pi[i]);
+   }
+   p_value = cephes_igamc (K / 2.0, chi2 / 2.0);
+   
+   std::free (B_);
+   std::free (P);
+   std::free (C);
+   std::free (T);
+
+   return p_value;
 }

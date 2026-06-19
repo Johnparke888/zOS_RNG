@@ -6,27 +6,72 @@ CXX_PROG=zos_getentropy
 
 RM=rm -f
 
-CC=/usr/local/gcc-15.2.0/bin/g++
-CXX=/usr/local/gcc-15.2.0/bin/gcc
-LD=/usr/local/gcc-15.2.0/bin/gcc
+CXX=/usr/local/gcc-15.2.0/bin/g++ -static-libstdc++
+CC=/usr/local/gcc-15.2.0/bin/gcc
+LD=/usr/local/gcc-15.2.0/bin/g++ 
 
-INCLUDE+=-I. -I../include -I/usr/local/include -I/usr/include
+EXTRA_LIBS= \
+/usr/local/gcc-15.2.0/lib/gcc/x86_64-pc-linux-gnu/15/libstdc++exp.a \
+/usr/local/lib/libbotan-3.a \
+/usr/local/lib/libcares.a \
+/usr/local/lib/libcpuid.a \
+/usr/local/lib/libcurl.a \
+/usr/local/lib/libgcrypt.a \
+/usr/local/lib/libgpg-error.a \
+/usr/local/lib/libgsasl.a \
+/usr/local/lib/libhd.a \
+/usr/local/lib/libhwloc.a \
+/usr/local/lib/libk5crypto.a \
+/usr/local/lib/libkrb5support.a \
+/usr/local/lib/libssl.a \
+/usr/local/lib/libuuid.a \
+/usr/local/lib/libxml2.a \
+/usr/local/lib/libzstd.a \
+/usr/local/lib64/libcrc32c.a \
+/usr/local/lib64/libcrypto.a \
+/usr/local/lib64/libs2n.a \
+/opt/openssl/lib/libcrypto.a \
+/opt/openssl/lib/libssl.a \
+/usr/local/lib/libbz2.a 
 
-CXXFLAGS+=-O0 -std=gnu++23 -m64 \
+PTHREAD_LIB=-lpthread
+
+MOST_LIBS= \
+-Wl,-verbose,--start-group \
+-Wl,-Bdynamic -L/usr/local/lib64 -L/usr/local/lib \
+$(PTHREAD_LIB) \
+-Wl,-Bstatic -L/usr/local/lib64 -L/usr/local/lib -L../lib \
+$(MBEDTLS_LIB) \
+$(BOOST_LIB) \
+$(POCO_LIB) \
+$(EXTRA_LIBS) \
+-Wl,-Bdynamic \
+$(CRYPT_LIB) \
+-Wl,--end-group 
+
+LDFLAGS=-Wl,-verbose,--start-group \
+	-Wl,-Bstatic -L/usr/local/lib64 -L/usr/local/lib -L../lib \
+	/usr/local/lib/libz.a \
+	$(MOST_LIBS) -ldl -lm \
+    -L/usr/local/gcc-15.2.0/lib/gcc/x86_64-pc-linux-gnu/15.2.0 \
+	-Wl,--end-group
+INCLUDE+=-I. -I../include -I/usr/local/include -I/usr/include -I/usr/local/include/botan-3
+
+CXXFLAGS+=-O3 -g3 -std=gnu++23 -m64 -mrdrnd -fmax-errors=5 \
  $(INCLUDE)
 
-CFLAGS+=-O0 -std=c17  -m64 $(INCLUDE)
+CFLAGS+=-O0 -g3 -std=gnu17 -m64  -fmax-errors=5 $(INCLUDE)
 
-CXXSOURCES = zos_entropy.cpp zos_statistical.cpp matrix.cpp
+CXXSOURCES = zos_entropy.cpp zos_statistical.cpp matrix.cpp Assess.cpp UniformityResult.cpp zos_generators_Linux.cpp
 CXXOBJECTS = $(CXXSOURCES:.cpp=.o)
 
-CSOURCES = zos_generators.c 
+CSOURCES = zos_generators.c stckf_Linux.c
 COBJECTS = $(CSOURCES:.c=.o)
 
 all:: clean $(CXX_PROG)
 
 $(CXX_PROG): $(CXXOBJECTS) $(COBJECTS)
-	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) 
+	$(LD) -o $@ $(CXXOBJECTS) $(COBJECTS) $(LDFLAGS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

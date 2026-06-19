@@ -11,13 +11,20 @@ It was compiled with the IBM Open XL C/C++ 2.1 compiler for z/OS
 
 Currently it tests three methods of random number generation:
 
-1. **PRNO-TRNG (function 114)** â uses `asm` statements to access the PRNO
-   instruction
+1. **PRNO-TRNG (function 114)** â uses `asm` statements to access the 
+    Perform Random Number Operation PRNO-TRNG (PRNO Function Code 114) instruction
 2. **Jitter** â CPU timing-jitter entropy
 3. **`/dev/urandom`** â provides cryptographically secure random output
+4. **Naive PRNG** â a very simple pseudo-random number generator that uses the system clock and SHA-512 to generate random output.
+5. **Bad Raw Clock** â a very simple and insecure generator that uses the
+	 system clock as a source of entropy
+6. **Bad Hash Counter** â a very simple and insecure generator that uses a
+	 hash function on a counter as a source of entropy
+
 
 The first two generators were adapted from code found in ZOSLIB. The
 statistical code was taken from the NIST Statistical Test Suite.
+PRNG generators 4-6 were added for testing purposes, to verify that the statistical tests can detect poor generators.
 
 ## Sources of Information and Code
 

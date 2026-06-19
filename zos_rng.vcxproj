@@ -56,15 +56,20 @@
     <None Include="source\Makefile-RH" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="source\Assess.cpp" />
     <ClCompile Include="source\matrix.cpp" />
-    <ClCompile Include="source\naive_prng.c" />
+    <ClCompile Include="source\stckf_Linux.c" />
+    <ClCompile Include="source\UniformityResult.cpp" />
     <ClCompile Include="source\zos_entropy.cpp" />
     <ClCompile Include="source\zos_generators.c" />
+    <ClCompile Include="source\zos_generators_Linux.cpp" />
     <ClCompile Include="source\zos_statistical.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\Assess.h" />
     <ClInclude Include="include\matrix.h" />
     <ClInclude Include="include\psa.h" />
+    <ClInclude Include="include\UniformityResult.h" />
     <ClInclude Include="include\zos_entropy-version.h" />
     <ClInclude Include="include\zos_entropy.h" />
     <ClInclude Include="include\zos_generators.h" />
