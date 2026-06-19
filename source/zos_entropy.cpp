@@ -219,7 +219,7 @@ int main ()
    std::cout << "Start" << std::endl;
    std::map<std::string, std::vector<double>> pvalues;
 
-   for (std::size_t generator = 1; generator < allGenerators.size (); ++generator)
+   for (std::size_t generator = 0; generator < allGenerators.size (); ++generator)
    {
       pvalues.clear ();
       bool haveReported = false;

@@ -378,7 +378,16 @@ UniformityResult calculate_uniformity_p_value (const std::vector<double> &pvalue
    {
       if (p < 0.0 || p > 1.0)
       {
-         throw std::invalid_argument ("p-value out of range");
+        if (p > 1.00)
+        {
+          std::cout << "warning pvalue of " << p << std::endl;
+          p = 1.00;
+        }
+        if (p < 0.00)
+        {
+          std::cout << "warning pvalue of " << p << std::endl;
+          p = 0.00;
+        }        // throw std::invalid_argument ("p-value out of range");
       }
 
       int bin = static_cast<int> (std::floor (p * 10.0));

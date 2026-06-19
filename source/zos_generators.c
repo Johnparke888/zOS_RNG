@@ -191,7 +191,7 @@ int prno_trng_installed ()
  */
 
 #ifdef __MVS__
-void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
+int prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
 {
    /* First operand (raw random_data) is unused; pin it to defined values. */
    unsigned char *raw_addr = 0;
@@ -215,6 +215,7 @@ void prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
                      : "memory");
 
 #endif
+    return 0;
 }
 #endif
 /* ------------------------------------------------------------------------ *

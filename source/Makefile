@@ -12,12 +12,12 @@ LD=ibm-clang++64
 
 INCLUDE+=-I. -I../include -I/usr/local/include -I/usr/include
 
-CXXFLAGS+=-O0 -std=gnu++23 -fzos-le-char-mode=ascii -mnocsect -m64 \
+CXXFLAGS+=-O3 -std=gnu++23 -fzos-le-char-mode=ascii -mnocsect -m64 \
 -fno-short-enums -faligned-allocation $(INCLUDE)
 
 CFLAGS+=-O0 -std=c17 -fzos-le-char-mode=ascii -mnocsect -m64 $(INCLUDE)
 
-CXXSOURCES = zos_entropy.cpp zos_statistical.cpp matrix.cpp
+CXXSOURCES = zos_entropy.cpp zos_statistical.cpp matrix.cpp Assess.cpp UniformityResult.cpp
 CXXOBJECTS = $(CXXSOURCES:.cpp=.o)
 
 CSOURCES = 
