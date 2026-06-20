@@ -15,7 +15,7 @@ Currently it tests three methods of random number generation:
     Perform Random Number Operation PRNO-TRNG (PRNO Function Code 114) instruction
 2. **Jitter** â CPU timing-jitter entropy
 3. **`/dev/urandom`** â provides cryptographically secure random output
-4. **Naive PRNG** â a very simple pseudo-random number generator that uses the system clock and SHA-512 to generate random output.
+4. **Naive PRNG** â a very simple and insecurepseudo-random number generator that uses the system clock and SHA-512 to generate random output.
 5. **Bad Raw Clock** â a very simple and insecure generator that uses the
 	 system clock as a source of entropy
 6. **Bad Hash Counter** â a very simple and insecure generator that uses a

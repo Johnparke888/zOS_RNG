@@ -3,7 +3,7 @@
 #define _OPEN_MSGQ_EXT 1
 
 #include <errno.h>
-#include <fcntl.h>        // Required for O_RDONLY
+#include <fcntl.h>       // Required for O_RDONLY
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -26,7 +26,7 @@
 #endif
 
 #include "zos_generators.h"
-       // clock_gettime, struct timespec
+// clock_gettime, struct timespec
 
 static int naive_counter = 0;
 
@@ -145,7 +145,7 @@ int prno_trng_installed ()
     * A 128-bit status word is stored in the parameter parm_block. Bits 0-127 of this field correspond
     * to function codes 0-127, respectively, of the PERFORM RANDOM NUMBER OPERATION instruction.
     * When a bit is one, the corresponding function is installed; otherwise, the function is not installed.
-    * Condition code 0 is set when execution of the PRNOQuery function completes; condition code 3 is not applicable to this function
+    * Condition code 0 is set when execution of the PRNO Query function completes; condition code 3 is not applicable to this function
 
     */
    if (cached != -1)
@@ -215,7 +215,7 @@ int prno_trng_generate (unsigned char *output_buffer_ptr, size_t size)
                      : "memory");
 
 #endif
-    return 0;
+   return 0;
 }
 #endif
 /* ------------------------------------------------------------------------ *
@@ -416,13 +416,13 @@ struct sha512_klmd_parm
 };
 
 static const struct sha512_klmd_parm sha512_initial_parm = {{0x6a09e667f3bcc908ULL,
-                                                      0xbb67ae8584caa73bULL,
-                                                      0x3c6ef372fe94f82bULL,
-                                                      0xa54ff53a5f1d36f1ULL,
-                                                      0x510e527fade682d1ULL,
-                                                      0x9b05688c2b3e6c1fULL,
-                                                      0x1f83d9abfb41bd6bULL,
-                                                      0x5be0cd19137e2179ULL}};
+                                                             0xbb67ae8584caa73bULL,
+                                                             0x3c6ef372fe94f82bULL,
+                                                             0xa54ff53a5f1d36f1ULL,
+                                                             0x510e527fade682d1ULL,
+                                                             0x9b05688c2b3e6c1fULL,
+                                                             0x1f83d9abfb41bd6bULL,
+                                                             0x5be0cd19137e2179ULL}};
 
 
 
@@ -584,7 +584,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
    size_t produced = 0;
 
-   printf ("Generating %zu bytes of random data using naive_prng_generate...\n", length);
+   // printf ("Generating %zu bytes of random data using naive_prng_generate...\n", length);
 
    struct DataBlock data_block;
    unsigned char digest[SHA512_DIGEST_LENGTH];
@@ -611,6 +611,7 @@ int naive_prng_generate (unsigned char *output, size_t length)
 
    return 0;
 }
+
 int bad_raw_clock_generate (unsigned char *output, size_t length)
 {
    size_t produced = 0;
@@ -626,7 +627,13 @@ int bad_raw_clock_generate (unsigned char *output, size_t length)
 
    return 0;
 }
-
+/*
+* So although the input is completely predictable, the output bytes are the result of a cryptographic hash function.
+* A good hash has an avalanche effect: changing the input from 0 to 1 to 2 should radically change the digest bits. 
+* The NIST-style statistical tests see those digest bits, not the simple counter underneath.
+* It is bad because it has no secret state and no entropy source. 
+* If someone knows the algorithm and knows or can guess the counter value, they can reproduce the stream.
+*/
 int bad_hash_counter_generate (unsigned char *output, size_t length)
 {
    static unsigned long long counter = 0;
@@ -637,6 +644,8 @@ int bad_hash_counter_generate (unsigned char *output, size_t length)
       struct DataBlock data_block;
       unsigned char digest[SHA512_DIGEST_LENGTH];
 
+    
+      memset (&data_block, 0, sizeof (data_block));
       data_block.data[0] = counter++;
 
       z_sha512_klmd (&data_block, digest);

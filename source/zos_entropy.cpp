@@ -210,6 +210,7 @@ int main ()
    std::vector<unsigned char> random_data (sample_size);
 
    epsilon = static_cast<unsigned char *> (std::malloc (sample_size * 8));
+
    if (epsilon == nullptr)
    {
       perror ("malloc");

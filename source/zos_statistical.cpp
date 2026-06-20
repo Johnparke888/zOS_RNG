@@ -59,9 +59,9 @@ int sgngam = 0;
  * B[], C[]: log gamma function between 2 and 3
  */
 constexpr unsigned short A[] = {0x6661, 0x2733, 0x9850, 0x3f4a, 0xe943, 0xb580, 0x7fbd, 0xbf43, 0x5ebb, 0x20dc,
-                             0x019f, 0x3f4a, 0xa5a1, 0x16b0, 0xc16c, 0xbf66, 0x554b, 0x5555, 0x5555, 0x3fb5};
+                                0x019f, 0x3f4a, 0xa5a1, 0x16b0, 0xc16c, 0xbf66, 0x554b, 0x5555, 0x5555, 0x3fb5};
 constexpr unsigned short B[] = {0x6761, 0x8ff3, 0x8901, 0xc095, 0xb93e, 0x355b, 0xf234, 0xc0e2, 0x89e5, 0xf890, 0x3d73, 0xc114,
-                             0xdb51, 0xf994, 0xbc82, 0xc131, 0xf20b, 0x0219, 0x4589, 0xc13a, 0x055e, 0x5418, 0x0c67, 0xc12a};
+                                0xdb51, 0xf994, 0xbc82, 0xc131, 0xf20b, 0x0219, 0x4589, 0xc13a, 0x055e, 0x5418, 0x0c67, 0xc12a};
 constexpr unsigned short C[] = {
     /*0x0000,0x0000,0x0000,0x3ff0,*/
     0x12b2, 0x1cf3, 0xfd0d, 0xc075, 0xd757, 0x7b89, 0xaa0d, 0xc0d0, 0x4c9b, 0xb974, 0xeb84, 0xc10a,
@@ -276,7 +276,7 @@ double cephes_lgam (double x)
    if (x > MAXLGM)
    {
    loverf:
-     // printf ("lgam: OVERFLOW\n");
+      // printf ("lgam: OVERFLOW\n");
 
       return sgngam * MAXNUM;
    }
@@ -1750,9 +1750,8 @@ double ApproximateEntropy (int m, int n)
 
    if (m > (int) (std::log (seqLength) / std::log (2) - 5))
    {
-      // std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) - 5)));
-      // std::printf ("  Results are inaccurate!\n");
-      // std::printf ("  --------------------------------------------\n");
+      // std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) -
+      // 5))); std::printf ("  Results are inaccurate!\n"); std::printf ("  --------------------------------------------\n");
    }
 
    // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
@@ -1974,22 +1973,41 @@ double psi2 (int m, int n)
 
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                         U N I V E R S A L  T E S T
+2.9 Maurerâs Universal Statistical Test
+2.9.1	 Test Purpose
+The focus of this test is the number of bits between matching patterns (a measure that is related to the
+length of a compressed sequence). The purpose of the test is to detect whether or not the sequence can be
+significantly compressed without loss of information. A significantly compressible sequence is
+considered to be non-random.
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-double Universal (int n)
+double Universal_Old (int n)
 {
-   int i, j, p, L, Q, K;
-   double arg, sqrt2, sigma, phi, sum, p_value, c;
+   
+   double arg = 0.0;
+   double sqrt2 = 0.0;
+   double sigma = 0.0;
+   double phi = 0.0;
+   double sum = 0.0;
+   double p_value = 0.0;
+   double c = 0.0;
+   int i = 0;
+   int j = 0;
+   int p = 0;
+   int L = 0;
+   int Q = 0;
+   int K = 0;
    long *T, decRep;
+
    constexpr double expected_value[17] = {
        0, 0, 0, 0, 0, 0, 5.2177052, 6.1962507, 7.1836656, 8.1764248, 9.1723243, 10.170032, 11.168765, 12.168070, 13.167693, 14.167488, 15.167379};
    constexpr double variance[17] = {0, 0, 0, 0, 0, 0, 2.954, 3.125, 3.238, 3.311, 3.356, 3.384, 3.401, 3.410, 3.416, 3.419, 3.421};
 
    /* * * * * * * * * ** * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-    * THE FOLLOWING REDEFINES L, SHOULD THE CONDITION:     n >= 1010*2^L*L       *
-    * NOT BE MET, FOR THE BLOCK LENGTH L.                                        *
+    * The Following Redefines L, Should The Condition:     N >= 1010*2^L*L       *
+    * Not Be Met, For The Block Length L.                                        *
     * * * * * * * * * * ** * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
    L = 5;
    if (n >= 387840)
    {
@@ -2037,30 +2055,35 @@ double Universal (int n)
    }
 
    Q = 10 * (int) std::pow (2, L);
-   K = (int) (floor (n / L) - (double) Q); /* BLOCKS TO TEST */
+   K = (int) (std::floor (n / L) - (double) Q); /* Blocks To Test */
 
    p = (int) std::pow (2, L);
+
    if ((L < 6) || (L > 16) || ((double) Q < 10 * std::pow (2, L)) || ((T = (long *) std::calloc (p, sizeof (long))) == nullptr))
    {
-      // std::printf ("  Universal Statistical Test\n");
-      // std::printf ("  ---------------------------------------------\n");
-      // std::printf ("  ERROR:  L is out of range.\n");
-      // std::printf ("  -OR- :  Q is less than %f.\n", 10 * std::pow (2, L));
-      // std::printf ("  -OR- :  Unable to allocate T.\n");
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ---------------------------------------------\n";
+      std::cout << "  ERROR:  L is out of range.\n";
+      std::cout << "  -OR- :  Q is less than " << 10 * std::pow (2, L) << ".\n";
+      std::cout << "  -OR- :  Unable to allocate T.\n";
       return 0.0;
    }
 
-   /* COMPUTE THE EXPECTED:  Formula 16, in Marsaglia's Paper */
+   /* Compute The Expected:  Formula 16, in Marsaglia's Paper */
    c = 0.7 - 0.8 / (double) L + (4 + 32 / (double) L) * std::pow (K, -3 / (double) L) / 15;
+   
    sigma = c * std::sqrt (variance[L] / (double) K);
    sqrt2 = std::sqrt (2);
    sum = 0.0;
+
    for (i = 0; i < p; i++)
    {
       T[i] = 0;
    }
+
    for (i = 1; i <= Q; i++)
-   { /* INITIALIZE TABLE */
+   {
+      /* Initialize Table */
       decRep = 0;
       for (j = 0; j < L; j++)
       {
@@ -2068,16 +2091,19 @@ double Universal (int n)
       }
       T[decRep] = i;
    }
+
    for (i = Q + 1; i <= Q + K; i++)
-   { /* PROCESS BLOCKS */
+   {
+      /* Process Blocks */
       decRep = 0;
       for (j = 0; j < L; j++)
       {
          decRep += epsilon[(i - 1) * L + j] * (long) std::pow (2, L - 1 - j);
       }
-      sum += log (i - T[decRep]) / log (2);
+      sum += std::log (i - T[decRep]) / std::log (2);
       T[decRep] = i;
    }
+
    phi = (double) (sum / (double) K);
 
    // std::printf ("  Universal Statistical Test\n");
@@ -2100,7 +2126,7 @@ double Universal (int n)
 
    if (std::signbit (p_value) || isGreaterThanOne (p_value))
    {
-      // std::printf ("  WARNING: P_VALUE IS OUT OF RANGE\n");
+      std::cout << "  Warning: P-Value Is Out Of Range\n";
    }
 
    // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
@@ -2110,6 +2136,282 @@ double Universal (int n)
    return p_value;
 }
 
+double Universal (int n)
+{
+   int i = 0;
+   int j = 0;
+   int p = 0;
+   int L = 0;
+   int Q = 0;
+   int K = 0;
+
+   double arg = 0.0;
+   double sqrt2 = 0.0;
+   double sigma = 0.0;
+   double phi = 0.0;
+   double sum = 0.0;
+   double p_value = 0.0;
+   double c = 0.0;
+
+   long *T = nullptr;
+   long decRep = 0;
+
+   constexpr double expected_value[17] = {
+       0, 0, 0, 0, 0, 0, 5.2177052, 6.1962507, 7.1836656, 8.1764248, 9.1723243, 10.170032, 11.168765, 12.168070, 13.167693, 14.167488, 15.167379};
+
+   constexpr double variance[17] = {0, 0, 0, 0, 0, 0, 2.954, 3.125, 3.238, 3.311, 3.356, 3.384, 3.401, 3.410, 3.416, 3.419, 3.421};
+
+   if (n <= 0)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: invalid sequence length n=" << n << ".\n";
+      return 0.0;
+   }
+
+   if (epsilon == nullptr)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: epsilon is null.\n";
+      return 0.0;
+   }
+
+   /*
+    * The following redefines L, should the condition:
+    *
+    *     n >= 1010 * 2^L * L
+    *
+    * not be met for the block length L.
+    */
+   L = 5;
+
+   if (n >= 387840)
+   {
+      L = 6;
+   }
+   if (n >= 904960)
+   {
+      L = 7;
+   }
+   if (n >= 2068480)
+   {
+      L = 8;
+   }
+   if (n >= 4654080)
+   {
+      L = 9;
+   }
+   if (n >= 10342400)
+   {
+      L = 10;
+   }
+   if (n >= 22753280)
+   {
+      L = 11;
+   }
+   if (n >= 49643520)
+   {
+      L = 12;
+   }
+   if (n >= 107560960)
+   {
+      L = 13;
+   }
+   if (n >= 231669760)
+   {
+      L = 14;
+   }
+   if (n >= 496435200)
+   {
+      L = 15;
+   }
+   if (n >= 1059061760)
+   {
+      L = 16;
+   }
+
+   p = 1 << L;
+   Q = 10 * p;
+   K = (int) (std::floor ((double) n / (double) L) - (double) Q);
+
+   if ((L < 6) || (L > 16))
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: L is out of range. L=" << L << ", n=" << n << ".\n";
+      return 0.0;
+   }
+
+   if (Q < 10 * p)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: Q is too small. Q=" << Q << ", required minimum=" << (10 * p) << ".\n";
+      return 0.0;
+   }
+
+   if (K <= 0)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: K must be positive. n=" << n << ", L=" << L << ", Q=" << Q << ", K=" << K << ".\n";
+      return 0.0;
+   }
+
+   T = (long *) std::calloc ((size_t) p, sizeof (long));
+   if (T == nullptr)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: unable to allocate T. p=" << p << ".\n";
+      return 0.0;
+   }
+
+   /*
+    * Compute the expected value correction.
+    */
+   c = 0.7 - 0.8 / (double) L + (4.0 + 32.0 / (double) L) * std::pow ((double) K, -3.0 / (double) L) / 15.0;
+
+   sigma = c * std::sqrt (variance[L] / (double) K);
+   sqrt2 = std::sqrt (2.0);
+   sum = 0.0;
+
+   if (!std::isfinite (c) || !std::isfinite (sigma) || sigma <= 0.0)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: invalid sigma calculation. c=" << c << ", sigma=" << sigma << ", variance=" << variance[L] << ", K=" << K << ", L=" << L
+                << ".\n";
+      std::free (T);
+      return 0.0;
+   }
+
+   /*
+    * Initialize table.
+    */
+   for (i = 1; i <= Q; i++)
+   {
+      decRep = 0;
+
+      for (j = 0; j < L; j++)
+      {
+         const unsigned char bit = epsilon[(i - 1) * L + j];
+
+         if ((bit != 0) && (bit != 1))
+         {
+            std::cout << "  Universal Statistical Test\n";
+            std::cout << "  ERROR: epsilon contains a non-bit value during initialization. "
+                      << "index=" << ((i - 1) * L + j) << ", value=" << (int) bit << ".\n";
+            std::free (T);
+            return 0.0;
+         }
+
+         decRep = (decRep << 1) | bit;
+      }
+
+      if ((decRep < 0) || (decRep >= p))
+      {
+         std::cout << "  Universal Statistical Test\n";
+         std::cout << "  ERROR: decRep out of range during initialization. "
+                   << "decRep=" << decRep << ", p=" << p << ", i=" << i << ".\n";
+         std::free (T);
+         return 0.0;
+      }
+
+      T[decRep] = i;
+   }
+
+   /*
+    * Process blocks.
+    */
+   for (i = Q + 1; i <= Q + K; i++)
+   {
+      long distance = 0;
+
+      decRep = 0;
+
+      for (j = 0; j < L; j++)
+      {
+         const unsigned char bit = epsilon[(i - 1) * L + j];
+
+         if ((bit != 0) && (bit != 1))
+         {
+            std::cout << "  Universal Statistical Test\n";
+            std::cout << "  ERROR: epsilon contains a non-bit value during processing. "
+                      << "index=" << ((i - 1) * L + j) << ", value=" << (int) bit << ".\n";
+            std::free (T);
+            return 0.0;
+         }
+
+         decRep = (decRep << 1) | bit;
+      }
+
+      if ((decRep < 0) || (decRep >= p))
+      {
+         std::cout << "  Universal Statistical Test\n";
+         std::cout << "  ERROR: decRep out of range during processing. "
+                   << "decRep=" << decRep << ", p=" << p << ", i=" << i << ".\n";
+         std::free (T);
+         return 0.0;
+      }
+
+      distance = i - T[decRep];
+
+      if (distance <= 0)
+      {
+         std::cout << "  Universal Statistical Test\n";
+         std::cout << "  ERROR: invalid distance. "
+                   << "distance=" << distance << ", i=" << i << ", T[decRep]=" << T[decRep] << ", decRep=" << decRep << ".\n";
+         std::free (T);
+         return 0.0;
+      }
+
+      sum += std::log2 ((double) distance);
+
+      if (!std::isfinite (sum))
+      {
+         std::cout << "  Universal Statistical Test\n";
+         std::cout << "  ERROR: sum became non-finite. "
+                   << "sum=" << sum << ", distance=" << distance << ", i=" << i << ", decRep=" << decRep << ".\n";
+         std::free (T);
+         return 0.0;
+      }
+
+      T[decRep] = i;
+   }
+
+   phi = sum / (double) K;
+
+   if (!std::isfinite (phi))
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: phi is non-finite. "
+                << "phi=" << phi << ", sum=" << sum << ", K=" << K << ".\n";
+      std::free (T);
+      return 0.0;
+   }
+
+   arg = std::fabs (phi - expected_value[L]) / (sqrt2 * sigma);
+
+   if (!std::isfinite (arg))
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: arg is non-finite. "
+                << "arg=" << arg << ", phi=" << phi << ", expected_value=" << expected_value[L] << ", sigma=" << sigma << ".\n";
+      std::free (T);
+      return 0.0;
+   }
+
+   p_value = std::erfc (arg);
+
+   if (!std::isfinite (p_value) || p_value < 0.0 || p_value > 1.0)
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  ERROR: invalid p_value. "
+                << "p_value=" << p_value << ", arg=" << arg << ", phi=" << phi << ", sigma=" << sigma << ", K=" << K << ", L=" << L << ", Q=" << Q
+                << ", p=" << p << ".\n";
+      std::free (T);
+      return 0.0;
+   }
+
+   std::free (T);
+
+   return p_value;
+}
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
             R A N D O M  E X C U R S I O N S  V A R I A N T  T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -2305,8 +2607,8 @@ double OverlappingTemplateMatchings (int m, int n)
 
 std::vector<double> NonOverlappingTemplateMatchings (int m, int n)
 {
-  
-    int numOfTemplates[100] = {0, 0, 2, 4, 6, 12, 20, 40, 74, 148, 284, 568, 1116, 2232, 4424, 8848, 17622, 35244, 70340, 140680, 281076, 562152};
+
+   int numOfTemplates[100] = {0, 0, 2, 4, 6, 12, 20, 40, 74, 148, 284, 568, 1116, 2232, 4424, 8848, 17622, 35244, 70340, 140680, 281076, 562152};
 
    /*----------------------------------------------------------------------------
    NOTE:  Should additional templates lengths beyond 21 be desired, they must
@@ -2338,7 +2640,8 @@ std::vector<double> NonOverlappingTemplateMatchings (int m, int n)
    std::error_code ec;
 
    if (((std::signbit (lambda)) || (isZero (lambda))) || (!std::filesystem::exists (templatePath, ec)) ||
-       ((file_ptr = fopen (templateStr.c_str (), "r")) == nullptr) || ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
+       ((file_ptr = fopen (templateStr.c_str (), "r")) == nullptr) ||
+       ((sequence = (unsigned char *) std::calloc (m, sizeof (unsigned char))) == nullptr))
    {
       // std::printf (" Non-Overlapping Templates Tests Aborted Due To One Of The Following : \n");
       // std::printf (" Lambda (%f) not being positive!\n", lambda);
@@ -2618,11 +2921,13 @@ double LinearComplexity (int M, int n)
    int i, ii, j, d, N, L, m, N_, parity, sign, K = 6;
    double p_value, T_, mean, nu[7], chi2;
    constexpr double pi[7] = {0.01047, 0.03125, 0.12500, 0.50000, 0.25000, 0.06250, 0.020833};
-   unsigned char  *T = nullptr, *P = nullptr, *B_ = nullptr, *C = nullptr;
+   unsigned char *T = nullptr, *P = nullptr, *B_ = nullptr, *C = nullptr;
 
    N = (int) std::floor (n / M);
-   if (((B_ = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) || ((C = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) ||
-       ((P = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr) || ((T = (unsigned char  *) std::calloc (M, sizeof (unsigned char ))) == nullptr))
+   if (((B_ = (unsigned char *) std::calloc (M, sizeof (unsigned char))) == nullptr) ||
+       ((C = (unsigned char *) std::calloc (M, sizeof (unsigned char))) == nullptr) ||
+       ((P = (unsigned char *) std::calloc (M, sizeof (unsigned char))) == nullptr) ||
+       ((T = (unsigned char *) std::calloc (M, sizeof (unsigned char))) == nullptr))
    {
       printf ("Insufficient Memory for Work Space:: Linear Complexity Test\n");
       if (B_ != nullptr)
@@ -2644,7 +2949,7 @@ double LinearComplexity (int M, int n)
       return 0.0;
    }
 
- 
+
    for (i = 0; i < K + 1; i++)
    {
       nu[i] = 0.00;
@@ -2759,7 +3064,7 @@ double LinearComplexity (int M, int n)
       chi2 += std::pow (nu[i] - N * pi[i], 2) / (N * pi[i]);
    }
    p_value = cephes_igamc (K / 2.0, chi2 / 2.0);
-   
+
    std::free (B_);
    std::free (P);
    std::free (C);
