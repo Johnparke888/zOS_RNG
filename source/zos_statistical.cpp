@@ -73,7 +73,7 @@ constexpr unsigned short C[] = {
 constexpr int MIN_LENGTH_FREQUENCY = 100;                      // Minimum n for Test_Frequency
 constexpr int MIN_LENGTH_BLOCK_FREQUENCY = 100;                // Minimum n for Test_Block_Frequency
 constexpr int MIN_M_BLOCK_FREQUENCY = 20;                      // Minimum M for Test_Block_Frequency
-constexpr int MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY = 0.01;       // Minimum ratio of M over n for Test_Block_Frequency
+constexpr double MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY = 0.01;       // Minimum ratio of M over n for Test_Block_Frequency
 constexpr int MAX_N_BLOCK_FREQUENCY = 100;                     // Maximum blocks number N for Test_Block_Frequency
 
 extern unsigned char *epsilon;
@@ -2876,23 +2876,23 @@ bool CanRunBlockFrequencyTest (int n, int M)
     */
    if (n < MIN_LENGTH_BLOCK_FREQUENCY)
    {
-      std::cout << "disabling test<< BlockFrequency requires bitcount(n): " << n << " >= " << MIN_LENGTH_BLOCK_FREQUENCY << std::endl;
+      std::cout << "disabling BlockFrequency test which requires bitcount(n) such that: " << n << " >= " << MIN_LENGTH_BLOCK_FREQUENCY << std::endl;
       return false;
    }
    else if (M < MIN_M_BLOCK_FREQUENCY)
    {
-      std::cout << "disabling test BlockFrequency requires block length(M): " << M << " >= " << MIN_M_BLOCK_FREQUENCY << std::endl;
+      std::cout << "disabling BlockFrequency test which requires block length(M): " << M << " >= " << MIN_M_BLOCK_FREQUENCY << std::endl;
       return false;
    }
-   else if (M <= MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY * n)
+   else if (M < int(MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY * n))
    {
-      std::cout << "disabling test BlockFrequency requires block length(M): " << M << " > " << MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY
-                << " * n, and here n = " << n << std::endl;
+      std::cout << "disabling BlockFrequency test which requires block length(M) such that M >= " << MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY
+                << " * n, and here n= " << n << ", and M= " << M << ", and MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY * n= " << MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY * n << std::endl;
       return false;
    }
    else if (N > MAX_N_BLOCK_FREQUENCY)
    {
-      std::cout << "disabling test BlockFrequency requires " << N << " <= " << MAX_N_BLOCK_FREQUENCY << std::endl;
+      std::cout << "disabling BlockFrequency test which requires " << N << " <= " << MAX_N_BLOCK_FREQUENCY << std::endl;
       return false;
    }
    return true;

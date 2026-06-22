@@ -36,11 +36,11 @@ static int choose_serial_m (int n)
    int m = floor_log2_int (n) - 5;
    return std::clamp (m, 2, 16);
 }
-
+// Choose m and n such that m < âlog2 nâ -5.
 static int choose_approximate_entropy_m (int n)
 {
    /* ApproximateEntropy warns when m > log2(n) - 5. */
-   int m = floor_log2_int (n) - 5;
+   int m = std::floor (std::log2(n)) - 5;
    return std::clamp (m, 2, 10);
 }
 
@@ -189,7 +189,8 @@ static constexpr int randomExcursionVariantStates[18] = {-9, -8, -7, -6, -5, -4,
 int main ()
 {
    int rc = 0;
-   int numberOfRuns = 10;
+   constexpr int numberOfRuns = 100;
+   constexpr std::size_t sample_size = 128 * 1024;
 
    constexpr std::array<GeneratorType, 6> allGenerators = {GeneratorType::TRNO,
                                                            GeneratorType::JITTER,
@@ -201,7 +202,7 @@ int main ()
    constexpr std::array<const char *, 6> generatorNames = {
        "PRNO-TRNG", "CPU jitter", "/dev/urandom", "Naive PRNG", "Bad Raw Clock", "Bad Hash Counter"};
 
-   constexpr std::size_t sample_size = 16 * 1024;
+   
    std::vector<unsigned char> random_data (sample_size);
 
    epsilon = static_cast<unsigned char *> (std::malloc (sample_size * 8));
