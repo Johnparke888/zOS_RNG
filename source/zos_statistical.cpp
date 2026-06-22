@@ -20,7 +20,10 @@ template <typename T> constexpr bool isPositive (T x) noexcept
 {
    return x > T{0};
 }
-
+template <typename T> constexpr bool isNegative (T x) noexcept
+{
+   return x < T{0};
+}
 template <typename T> constexpr bool isGreaterThanOne (T x) noexcept
 {
    return x > T{1};
@@ -66,6 +69,12 @@ constexpr unsigned short C[] = {
     /*0x0000,0x0000,0x0000,0x3ff0,*/
     0x12b2, 0x1cf3, 0xfd0d, 0xc075, 0xd757, 0x7b89, 0xaa0d, 0xc0d0, 0x4c9b, 0xb974, 0xeb84, 0xc10a,
     0x0043, 0x7195, 0x6286, 0xc131, 0xf34c, 0x892f, 0x5255, 0xc143, 0xe14a, 0x6a11, 0xce4b, 0xc13e};
+
+constexpr int MIN_LENGTH_FREQUENCY = 100;                      // Minimum n for Test_Frequency
+constexpr int MIN_LENGTH_BLOCK_FREQUENCY = 100;                // Minimum n for Test_Block_Frequency
+constexpr int MIN_M_BLOCK_FREQUENCY = 20;                      // Minimum M for Test_Block_Frequency
+constexpr int MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY = 0.01;       // Minimum ratio of M over n for Test_Block_Frequency
+constexpr int MAX_N_BLOCK_FREQUENCY = 100;                     // Maximum blocks number N for Test_Block_Frequency
 
 extern unsigned char *epsilon;
 
@@ -152,7 +161,10 @@ double cephes_igamc (double a, double x)
 
 double cephes_igam (double a, double x)
 {
-   double ans, ax, c, r;
+   double ans = 0;
+   double ax = 0;
+   double c = 0;
+   double r = 0;
 
    if ((x <= 0) || (a <= 0))
    {
@@ -192,8 +204,8 @@ double cephes_igam (double a, double x)
 /* Logarithm of gamma function */
 double cephes_lgam (double x)
 {
-   double p, q, u, w, z;
-   int i;
+   double p = 0, q = 0, u = 0, w = 0, z = 0;
+   int i = 0;
 
    sgngam = 1;
 
@@ -432,379 +444,6 @@ double Pr (int u, double eta)
       p = sum;
    }
    return p;
-}
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                              R U N S  T E S T
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-double Runs (int n)
-{
-   int S, k;
-   double pi, V, erfc_arg, p_value;
-
-   S = 0;
-   for (k = 0; k < n; k++)
-   {
-      if (epsilon[k])
-      {
-         S++;
-      }
-   }
-   pi = (double) S / (double) n;
-
-   if (std::fabs (pi - 0.5) > (2.0 / std::sqrt (n)))
-   {
-      // std::printf ("    RUNS TEST\n");
-      // std::printf ("  ------------------------------------------\n");
-      // std::printf ("  PI ESTIMATOR CRITERIA NOT MET! PI = %f\n", pi);
-      p_value = 0.0;
-   }
-   else
-   {
-
-      V = 1;
-      for (k = 1; k < n; k++)
-      {
-         if (epsilon[k] != epsilon[k - 1])
-         {
-            V++;
-         }
-      }
-
-      erfc_arg = std::fabs (V - 2.0 * n * pi * (1 - pi)) / (2.0 * pi * (1 - pi) * std::sqrt (2 * n));
-      p_value = erfc (erfc_arg);
-
-      // std::printf ("    Runs Test\n");
-      // std::printf ("  ------------------------------------------\n");
-      // std::printf ("  Computational Information:\n");
-      // std::printf ("  ------------------------------------------\n");
-      // std::printf ("  (a) Pi                        = %f\n", pi);
-      // std::printf ("  (b) V_n_obs (Total # of runs) = %d\n", (int) V);
-      // std::printf ("  (c) V_n_obs - 2 n pi (1-pi)\n");
-      // std::printf ("      -----------------------   = %f\n", erfc_arg);
-      // std::printf ("        2 std::sqrt(2n) pi (1-pi)\n");
-      // std::printf ("  ------------------------------------------\n");
-      if (std::signbit (p_value) || isGreaterThanOne (p_value))
-      {
-         // std::printf ("WARNING:  P_VALUE Is Out Of Range.\n");
-      }
-
-      // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
-   }
-   return p_value;
-}
-
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                     R A N D O M  E X C U R S I O N S  T E S T
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-std::vector<double> RandomExcursions (int n)
-{
-   int b, i, j, k, J, x;
-   int cycleStart, cycleStop, *cycle = nullptr, *S_k = nullptr;
-   constexpr int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
-   int counter[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-
-   double p_value = 0;
-   double sum = 0;
-   double constraint = 0;
-   double nu[6][8] = {{0}};
-
-   std::vector<double> p_values;
-
-   constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
-                                {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
-                                {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
-                                {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
-                                {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
-
-   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) ||
-       ((cycle = (int *) std::calloc (std::max (1000, n / 100), sizeof (int))) == nullptr))
-   {
-      // std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
-      if (S_k != nullptr)
-      {
-         std::free (S_k);
-      }
-      if (cycle != nullptr)
-      {
-         std::free (cycle);
-      }
-      return p_values;
-   }
-
-   J = 0; /* DETERMINE CYCLES */
-   S_k[0] = 2 * (int) epsilon[0] - 1;
-   for (i = 1; i < n; i++)
-   {
-      S_k[i] = S_k[i - 1] + 2 * epsilon[i] - 1;
-      if (S_k[i] == 0)
-      {
-         J++;
-         if (J > std::max (1000, n / 100))
-         {
-            // std::printf ("Error In Function randomExcursions:  Exceeding The Max Number Of Cycles Expected\n.");
-            std::free (S_k);
-            std::free (cycle);
-            return p_values;
-         }
-         cycle[J] = i;
-      }
-   }
-   if (S_k[n - 1] != 0)
-   {
-      J++;
-   }
-   cycle[J] = n;
-
-   // std::printf ("     Random Excursions Test\n");
-   // std::printf ("  --------------------------------------------\n");
-   // std::printf ("  Computational Information:\n");
-   // std::printf ("  --------------------------------------------\n");
-   // std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
-   // std::printf ("  (b) Sequence Length (n)  = %d\n", n);
-
-   constraint = std::max (0.005 * std::pow (n, 0.5), 500.0);
-   if (J < constraint)
-   {
-      // std::printf ("  ---------------------------------------------\n");
-      // std::printf ("  Warning:  Test Not Applicable.  There Are An\n");
-      // std::printf ("     Insufficient Number Of Cycles.\n");
-      // std::printf ("  ---------------------------------------------\n");
-      for (i = 0; i < 8; i++)
-      {
-         // std::printf ("%f\n", 0.0);
-         p_values.push_back (0.0);
-      }
-   }
-   else
-   {
-      // std::printf ("  (c) Rejection Constraint = %f\n", constraint);
-      // std::printf ("  -------------------------------------------\n");
-
-      cycleStart = 0;
-      cycleStop = cycle[1];
-      for (k = 0; k < 6; k++)
-      {
-         for (i = 0; i < 8; i++)
-         {
-            nu[k][i] = 0.;
-         }
-      }
-      for (j = 1; j <= J; j++)
-      { /* FOR EACH CYCLE */
-         for (i = 0; i < 8; i++)
-         {
-            counter[i] = 0;
-         }
-         for (i = cycleStart; i < cycleStop; i++)
-         {
-            if ((S_k[i] >= 1 && S_k[i] <= 4) || (S_k[i] >= -4 && S_k[i] <= -1))
-            {
-               if (S_k[i] < 0)
-               {
-                  b = 4;
-               }
-               else
-               {
-                  b = 3;
-               }
-               counter[S_k[i] + b]++;
-            }
-         }
-         cycleStart = cycle[j] + 1;
-         if (j < J)
-         {
-            cycleStop = cycle[j + 1];
-         }
-
-         for (i = 0; i < 8; i++)
-         {
-            if ((counter[i] >= 0) && (counter[i] <= 4))
-            {
-               nu[counter[i]][i]++;
-            }
-            else if (counter[i] >= 5)
-            {
-               nu[5][i]++;
-            }
-         }
-      }
-
-      for (i = 0; i < 8; i++)
-      {
-         x = stateX[i];
-         sum = 0.;
-         for (k = 0; k < 6; k++)
-         {
-            sum += std::pow (nu[k][i] - J * pi[(int) std::fabs (x)][k], 2) / (J * pi[(int) std::fabs (x)][k]);
-         }
-         p_value = cephes_igamc (2.5, sum / 2.0);
-
-         if (std::signbit (p_value) || isGreaterThanOne (p_value))
-         {
-            // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
-         }
-
-         // std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
-         p_values.push_back (p_value);
-      }
-   }
-   // std::printf ("\n");
-
-   std::free (S_k);
-   std::free (cycle);
-   return p_values;
-}
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                      L O N G E S T  R U N S  T E S T
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-
-double LongestRunOfOnes (int n)
-{
-   double pval, chi2, pi[7];
-   int run, v_n_obs, N, i, j, K, M, V[7];
-   unsigned int nu[7] = {0, 0, 0, 0, 0, 0, 0};
-
-   if (n < 128)
-   {
-      // std::printf ("     Longest Runs Of Ones Test\n");
-      // std::printf ("  ---------------------------------------------\n");
-      // std::printf ("     n=%d is too short\n", n);
-      return 0.0;
-   }
-   if (n < 6272)
-   {
-      K = 3;
-      M = 8;
-      V[0] = 1;
-      V[1] = 2;
-      V[2] = 3;
-      V[3] = 4;
-      pi[0] = 0.21484375;
-      pi[1] = 0.3671875;
-      pi[2] = 0.23046875;
-      pi[3] = 0.1875;
-   }
-   else if (n < 750000)
-   {
-      K = 5;
-      M = 128;
-      V[0] = 4;
-      V[1] = 5;
-      V[2] = 6;
-      V[3] = 7;
-      V[4] = 8;
-      V[5] = 9;
-      pi[0] = 0.1174035788;
-      pi[1] = 0.242955959;
-      pi[2] = 0.249363483;
-      pi[3] = 0.17517706;
-      pi[4] = 0.102701071;
-      pi[5] = 0.112398847;
-   }
-   else
-   {
-      K = 6;
-      M = 10000;
-      V[0] = 10;
-      V[1] = 11;
-      V[2] = 12;
-      V[3] = 13;
-      V[4] = 14;
-      V[5] = 15;
-      V[6] = 16;
-      pi[0] = 0.0882;
-      pi[1] = 0.2092;
-      pi[2] = 0.2483;
-      pi[3] = 0.1933;
-      pi[4] = 0.1208;
-      pi[5] = 0.0675;
-      pi[6] = 0.0727;
-   }
-
-   N = n / M;
-   for (i = 0; i < N; i++)
-   {
-      v_n_obs = 0;
-      run = 0;
-      for (j = 0; j < M; j++)
-      {
-         if (epsilon[i * M + j] == 1)
-         {
-            run++;
-            if (run > v_n_obs)
-            {
-               v_n_obs = run;
-            }
-         }
-         else
-         {
-            run = 0;
-         }
-      }
-      if (v_n_obs < V[0])
-      {
-         nu[0]++;
-      }
-      for (j = 0; j <= K; j++)
-      {
-         if (v_n_obs == V[j])
-         {
-            nu[j]++;
-         }
-      }
-      if (v_n_obs > V[K])
-      {
-         nu[K]++;
-      }
-   }
-
-   chi2 = 0.0;
-   for (i = 0; i <= K; i++)
-   {
-      chi2 += ((nu[i] - N * pi[i]) * (nu[i] - N * pi[i])) / (N * pi[i]);
-   }
-
-   pval = cephes_igamc ((double) (K / 2.0), chi2 / 2.0);
-
-   // std::printf ("     Longest Runs Of Ones Test\n");
-   // std::printf ("  ---------------------------------------------\n");
-   // std::printf ("  Computational Information:\n");
-   // std::printf ("  ---------------------------------------------\n");
-   // std::printf ("  (a) N (# of substrings)  = %d\n", N);
-   // std::printf ("  (b) M (Substring Length) = %d\n", M);
-   // std::printf ("  (c) Chi^2                = %f\n", chi2);
-   // std::printf ("  ---------------------------------------------\n");
-   // std::printf ("        Frequency\n");
-   // std::printf ("  ---------------------------------------------\n");
-
-   if (K == 3)
-   {
-      // std::printf ("    <=1     2     3    >=4   P-value  Assignment");
-      // std::printf ("\n   %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3]);
-   }
-   else if (K == 5)
-   {
-      // std::printf ("  <=4  5  6  7  8  >=9 P-value  Assignment");
-      // std::printf ("\n   %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5]);
-   }
-   else
-   {
-      // std::printf ("  <=10  11  12  13  14  15 >=16 P-value  Assignment");
-      // std::printf ("\n   %3d %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], nu[6]);
-   }
-   if (std::signbit (pval) || isGreaterThanOne (pval))
-   {
-      // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
-   }
-
-   // std::printf ("%s  p_value = %f\n\n", pval < ALPHA ? "FAILURE" : "SUCCESS", pval);
-   return pval;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -1584,6 +1223,379 @@ void __ogg_fdrfftf (int n, double *r, double *wsave, int *ifac)
    drftf1 (n, r, wsave, wsave + n, ifac);
 }
 
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+                              R U N S  T E S T
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+double Runs (int n)
+{
+   int S, k;
+   double pi, V, erfc_arg, p_value;
+
+   S = 0;
+   for (k = 0; k < n; k++)
+   {
+      if (epsilon[k])
+      {
+         S++;
+      }
+   }
+   pi = (double) S / (double) n;
+
+   if (std::fabs (pi - 0.5) > (2.0 / std::sqrt (n)))
+   {
+      // std::printf ("    RUNS TEST\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  PI ESTIMATOR CRITERIA NOT MET! PI = %f\n", pi);
+      p_value = 0.0;
+   }
+   else
+   {
+
+      V = 1;
+      for (k = 1; k < n; k++)
+      {
+         if (epsilon[k] != epsilon[k - 1])
+         {
+            V++;
+         }
+      }
+
+      erfc_arg = std::fabs (V - 2.0 * n * pi * (1 - pi)) / (2.0 * pi * (1 - pi) * std::sqrt (2 * n));
+      p_value = erfc (erfc_arg);
+
+      // std::printf ("    Runs Test\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  Computational Information:\n");
+      // std::printf ("  ------------------------------------------\n");
+      // std::printf ("  (a) Pi                        = %f\n", pi);
+      // std::printf ("  (b) V_n_obs (Total # of runs) = %d\n", (int) V);
+      // std::printf ("  (c) V_n_obs - 2 n pi (1-pi)\n");
+      // std::printf ("      -----------------------   = %f\n", erfc_arg);
+      // std::printf ("        2 std::sqrt(2n) pi (1-pi)\n");
+      // std::printf ("  ------------------------------------------\n");
+      if (std::signbit (p_value) || isGreaterThanOne (p_value))
+      {
+         // std::printf ("WARNING:  P_VALUE Is Out Of Range.\n");
+      }
+
+      // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   }
+   return p_value;
+}
+
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+                     R A N D O M  E X C U R S I O N S  T E S T
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+std::vector<double> RandomExcursions (int n)
+{
+   int b, i, j, k, J, x;
+   int cycleStart, cycleStop, *cycle = nullptr, *S_k = nullptr;
+   constexpr int stateX[8] = {-4, -3, -2, -1, 1, 2, 3, 4};
+   int counter[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+   double p_value = 0;
+   double sum = 0;
+   double constraint = 0;
+   double nu[6][8] = {{0}};
+
+   std::vector<double> p_values;
+
+   constexpr double pi[5][6] = {{0.0000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.00000000000, 0.0000000000},
+                                {0.5000000000, 0.25000000000, 0.12500000000, 0.06250000000, 0.03125000000, 0.0312500000},
+                                {0.7500000000, 0.06250000000, 0.04687500000, 0.03515625000, 0.02636718750, 0.0791015625},
+                                {0.8333333333, 0.02777777778, 0.02314814815, 0.01929012346, 0.01607510288, 0.0803755143},
+                                {0.8750000000, 0.01562500000, 0.01367187500, 0.01196289063, 0.01046752930, 0.0732727051}};
+
+   if (((S_k = (int *) std::calloc (n, sizeof (int))) == nullptr) ||
+       ((cycle = (int *) std::calloc (std::max (1000, n / 100), sizeof (int))) == nullptr))
+   {
+      // std::printf ("Random Excursions Test:  Insufficient Work Space Allocated.\n");
+      if (S_k != nullptr)
+      {
+         std::free (S_k);
+      }
+      if (cycle != nullptr)
+      {
+         std::free (cycle);
+      }
+      return p_values;
+   }
+
+   J = 0; /* DETERMINE CYCLES */
+   S_k[0] = 2 * (int) epsilon[0] - 1;
+   for (i = 1; i < n; i++)
+   {
+      S_k[i] = S_k[i - 1] + 2 * epsilon[i] - 1;
+      if (S_k[i] == 0)
+      {
+         J++;
+         if (J > std::max (1000, n / 100))
+         {
+            // std::printf ("Error In Function randomExcursions:  Exceeding The Max Number Of Cycles Expected\n.");
+            std::free (S_k);
+            std::free (cycle);
+            return p_values;
+         }
+         cycle[J] = i;
+      }
+   }
+   if (S_k[n - 1] != 0)
+   {
+      J++;
+   }
+   cycle[J] = n;
+
+   // std::printf ("     Random Excursions Test\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  --------------------------------------------\n");
+   // std::printf ("  (a) Number Of Cycles (J) = %04d\n", J);
+   // std::printf ("  (b) Sequence Length (n)  = %d\n", n);
+
+   constraint = std::max (0.005 * std::pow (n, 0.5), 500.0);
+   if (J < constraint)
+   {
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("  Warning:  Test Not Applicable.  There Are An\n");
+      // std::printf ("     Insufficient Number Of Cycles.\n");
+      // std::printf ("  ---------------------------------------------\n");
+      for (i = 0; i < 8; i++)
+      {
+         // std::printf ("%f\n", 0.0);
+         p_values.push_back (0.0);
+      }
+   }
+   else
+   {
+      // std::printf ("  (c) Rejection Constraint = %f\n", constraint);
+      // std::printf ("  -------------------------------------------\n");
+
+      cycleStart = 0;
+      cycleStop = cycle[1];
+      for (k = 0; k < 6; k++)
+      {
+         for (i = 0; i < 8; i++)
+         {
+            nu[k][i] = 0.;
+         }
+      }
+      for (j = 1; j <= J; j++)
+      { /* FOR EACH CYCLE */
+         for (i = 0; i < 8; i++)
+         {
+            counter[i] = 0;
+         }
+         for (i = cycleStart; i < cycleStop; i++)
+         {
+            if ((S_k[i] >= 1 && S_k[i] <= 4) || (S_k[i] >= -4 && S_k[i] <= -1))
+            {
+               if (S_k[i] < 0)
+               {
+                  b = 4;
+               }
+               else
+               {
+                  b = 3;
+               }
+               counter[S_k[i] + b]++;
+            }
+         }
+         cycleStart = cycle[j] + 1;
+         if (j < J)
+         {
+            cycleStop = cycle[j + 1];
+         }
+
+         for (i = 0; i < 8; i++)
+         {
+            if ((counter[i] >= 0) && (counter[i] <= 4))
+            {
+               nu[counter[i]][i]++;
+            }
+            else if (counter[i] >= 5)
+            {
+               nu[5][i]++;
+            }
+         }
+      }
+
+      for (i = 0; i < 8; i++)
+      {
+         x = stateX[i];
+         sum = 0.;
+         for (k = 0; k < 6; k++)
+         {
+            sum += std::pow (nu[k][i] - J * pi[(int) std::fabs (x)][k], 2) / (J * pi[(int) std::fabs (x)][k]);
+         }
+         p_value = cephes_igamc (2.5, sum / 2.0);
+
+         if (std::signbit (p_value) || isGreaterThanOne (p_value))
+         {
+            // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+         }
+
+         // std::printf ("%s  x = %2d chi^2 = %9.6f p_value = %f\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", x, sum, p_value);
+         p_values.push_back (p_value);
+      }
+   }
+   // std::printf ("\n");
+
+   std::free (S_k);
+   std::free (cycle);
+   return p_values;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+                      L O N G E S T  R U N S  T E S T
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+
+double LongestRunOfOnes (int n)
+{
+   double pval, chi2, pi[7];
+   int run, v_n_obs, N, i, j, K, M, V[7];
+   unsigned int nu[7] = {0, 0, 0, 0, 0, 0, 0};
+
+   if (n < 128)
+   {
+      // std::printf ("     Longest Runs Of Ones Test\n");
+      // std::printf ("  ---------------------------------------------\n");
+      // std::printf ("     n=%d is too short\n", n);
+      return 0.0;
+   }
+   if (n < 6272)
+   {
+      K = 3;
+      M = 8;
+      V[0] = 1;
+      V[1] = 2;
+      V[2] = 3;
+      V[3] = 4;
+      pi[0] = 0.21484375;
+      pi[1] = 0.3671875;
+      pi[2] = 0.23046875;
+      pi[3] = 0.1875;
+   }
+   else if (n < 750000)
+   {
+      K = 5;
+      M = 128;
+      V[0] = 4;
+      V[1] = 5;
+      V[2] = 6;
+      V[3] = 7;
+      V[4] = 8;
+      V[5] = 9;
+      pi[0] = 0.1174035788;
+      pi[1] = 0.242955959;
+      pi[2] = 0.249363483;
+      pi[3] = 0.17517706;
+      pi[4] = 0.102701071;
+      pi[5] = 0.112398847;
+   }
+   else
+   {
+      K = 6;
+      M = 10000;
+      V[0] = 10;
+      V[1] = 11;
+      V[2] = 12;
+      V[3] = 13;
+      V[4] = 14;
+      V[5] = 15;
+      V[6] = 16;
+      pi[0] = 0.0882;
+      pi[1] = 0.2092;
+      pi[2] = 0.2483;
+      pi[3] = 0.1933;
+      pi[4] = 0.1208;
+      pi[5] = 0.0675;
+      pi[6] = 0.0727;
+   }
+
+   N = n / M;
+   for (i = 0; i < N; i++)
+   {
+      v_n_obs = 0;
+      run = 0;
+      for (j = 0; j < M; j++)
+      {
+         if (epsilon[i * M + j] == 1)
+         {
+            run++;
+            if (run > v_n_obs)
+            {
+               v_n_obs = run;
+            }
+         }
+         else
+         {
+            run = 0;
+         }
+      }
+      if (v_n_obs < V[0])
+      {
+         nu[0]++;
+      }
+      for (j = 0; j <= K; j++)
+      {
+         if (v_n_obs == V[j])
+         {
+            nu[j]++;
+         }
+      }
+      if (v_n_obs > V[K])
+      {
+         nu[K]++;
+      }
+   }
+
+   chi2 = 0.0;
+   for (i = 0; i <= K; i++)
+   {
+      chi2 += ((nu[i] - N * pi[i]) * (nu[i] - N * pi[i])) / (N * pi[i]);
+   }
+
+   pval = cephes_igamc ((double) (K / 2.0), chi2 / 2.0);
+
+   // std::printf ("     Longest Runs Of Ones Test\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  Computational Information:\n");
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("  (a) N (# of substrings)  = %d\n", N);
+   // std::printf ("  (b) M (Substring Length) = %d\n", M);
+   // std::printf ("  (c) Chi^2                = %f\n", chi2);
+   // std::printf ("  ---------------------------------------------\n");
+   // std::printf ("        Frequency\n");
+   // std::printf ("  ---------------------------------------------\n");
+
+   if (K == 3)
+   {
+      // std::printf ("    <=1     2     3    >=4   P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3]);
+   }
+   else if (K == 5)
+   {
+      // std::printf ("  <=4  5  6  7  8  >=9 P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5]);
+   }
+   else
+   {
+      // std::printf ("  <=10  11  12  13  14  15 >=16 P-value  Assignment");
+      // std::printf ("\n   %3d %3d %3d %3d %3d %3d  %3d ", nu[0], nu[1], nu[2], nu[3], nu[4], nu[5], nu[6]);
+   }
+   if (std::signbit (pval) || isGreaterThanOne (pval))
+   {
+      // std::printf ("WARNING:  P_VALUE IS OUT OF RANGE.\n");
+   }
+
+   // std::printf ("%s  p_value = %f\n\n", pval < ALPHA ? "FAILURE" : "SUCCESS", pval);
+   return pval;
+}
+
 double DiscreteFourierTransform (int n)
 {
    double p_value, upperBound, percentile, N_l, N_o, d, *m = nullptr, *X = nullptr, *wsave = nullptr;
@@ -1658,6 +1670,31 @@ double DiscreteFourierTransform (int n)
                 A P P R O X I M A T E  E N T R O P Y   T E S T
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+bool EvaluateApproximateEntropyResult (double p_value)
+{
+   if (isNegative (p_value))
+   {
+      // Bogus p_value < 0.0 treated as a failure
+
+      std::cout << "iteration Approximate Entropy Test produced bogus p_value: " << p_value << std::endl;
+      return false;
+   }
+   else if (isGreaterThanOne (p_value))
+   {
+      std::cout << "iteration Approximate Entropy Test produced bogus p_value: " << p_value << std::endl;
+      return false;
+   }
+   else if (p_value < ALPHA)
+   {
+      return true;       // test failed but the p-value is valid
+   }
+   else
+   {
+      return true;       // p-value is valid
+   }
+   return true;       // should never reach here
+}
+
 double ApproximateEntropy (int m, int n)
 {
    int i = 0;
@@ -1698,7 +1735,7 @@ double ApproximateEntropy (int m, int n)
          powLen = (int) std::pow (2, blockSize + 1) - 1;
          if ((P = (unsigned int *) std::calloc (powLen, sizeof (unsigned int))) == nullptr)
          {
-            // std::printf ("ApEn:  Insufficient memory available.\n");
+            std::cout << "ApEn:  Insufficient memory available.\n";
             return 0.0;
          }
          for (i = 1; i < powLen - 1; i++)
@@ -1706,7 +1743,8 @@ double ApproximateEntropy (int m, int n)
             P[i] = 0;
          }
          for (i = 0; i < numOfBlocks; i++)
-         { /* Compute Frequency */
+         {
+            /* Compute Frequency */
             k = 1;
             for (j = 0; j < blockSize; j++)
             {
@@ -1750,11 +1788,11 @@ double ApproximateEntropy (int m, int n)
 
    if (m > (int) (std::log (seqLength) / std::log (2) - 5))
    {
-      // std::printf ("  Note: The blockSize = %d exceeds recommended value of %d\n", m, std::max (1, (int) (std::log (seqLength) / std::log (2) -
-      // 5))); std::printf ("  Results are inaccurate!\n"); std::printf ("  --------------------------------------------\n");
+      std::cout << "  Note: The blockSize = " << m << " exceeds recommended value of "
+                << std::max (1, (int) (std::log (seqLength) / std::log (2) - 5)) << "\n";
+      std::cout << "  Results are inaccurate!\n";
+      std::cout << "  --------------------------------------------\n";
    }
-
-   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
 
    return p_value;
 }
@@ -1794,6 +1832,50 @@ double Frequency (int n)
 }
 
 
+bool CanRunSerial (int m, int n)
+{
+   if (m >= lround (floor ((log (n) / log (2.0) - 2.0))))
+   {
+      std::cout << "disabling test Serial: requires block length(m): " << m << " >= " << lround (floor (log (n) / log (2.0) - 2.0)) << std::endl;
+      return false;
+   }
+   return true;
+}
+
+std::pair<bool, bool> EvaluateSerialResults (double p_value1, double p_value2)
+{
+   std::pair<bool, bool> result;
+   if (isNegative (p_value1))
+   {
+      std::cout << "Serial test Warning: p_value1 is negative. Treating as failure. " << "p-value 1: " << p_value1 << std::endl;
+      result.first = false;
+   }
+   else if (isGreaterThanOne (p_value1))
+   {
+      std::cout << "Serial test Warning: p_value1 is greater than 1.0. Treating as failure. " << "p-value 1: " << p_value1 << std::endl;
+      result.first = false;
+   }
+   else if (p_value1 < ALPHA)
+   {
+      result.first = true;       // failed test, but the results are valid
+   }
+
+   if (isNegative (p_value2))
+   {
+      std::cout << "Serial test Warning: p_value2 is negative. Treating as failure. " << "p-value 2: " << p_value2 << std::endl;
+      result.second = false;
+   }
+   else if (isGreaterThanOne (p_value2))
+   {
+      std::cout << "Serial test Warning: p_value2 is greater than 1.0. Treating as failure. " << "p-value 2: " << p_value2 << std::endl;
+      result.second = false;
+   }
+   else if (p_value2 < ALPHA)
+   {
+      result.second = true;       // failed test, but the results are valid
+   }
+   return result;
+}
 
 std::pair<double, double> Serial (int m, int n)
 {
@@ -1828,6 +1910,11 @@ std::pair<double, double> Serial (int m, int n)
 
    // std::printf ("%s  p_value1 = %f\n", p_value1 < ALPHA ? "FAILURE" : "SUCCESS", p_value1);
    // std::printf ("%s  p_value2 = %f\n\n", p_value2 < ALPHA ? "FAILURE" : "SUCCESS", p_value2);
+
+   /*
+    * Record success or failure for this iteration (1st test)
+    */
+
 
    return std::make_pair (p_value1, p_value2);
 }
@@ -1983,7 +2070,7 @@ considered to be non-random.
 
 double Universal_Old (int n)
 {
-   
+
    double arg = 0.0;
    double sqrt2 = 0.0;
    double sigma = 0.0;
@@ -2071,7 +2158,7 @@ double Universal_Old (int n)
 
    /* Compute The Expected:  Formula 16, in Marsaglia's Paper */
    c = 0.7 - 0.8 / (double) L + (4 + 32 / (double) L) * std::pow (K, -3 / (double) L) / 15;
-   
+
    sigma = c * std::sqrt (variance[L] / (double) K);
    sqrt2 = std::sqrt (2);
    sum = 0.0;
@@ -2409,7 +2496,14 @@ double Universal (int n)
    }
 
    std::free (T);
-
+   if (std::isinf (p_value))
+   {
+      std::cout << "  Universal Statistical Test\n";
+      std::cout << "  WARNING: p_value is infinite. Returning 0.0. "
+                << "p_value=" << p_value << ", arg=" << arg << ", phi=" << phi << ", sigma=" << sigma << ", K=" << K << ", L=" << L << ", Q=" << Q
+                << ", p=" << p << ".\n";
+      return 0.0;
+   }
    return p_value;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -2770,13 +2864,50 @@ std::vector<double> NonOverlappingTemplateMatchings (int m, int n)
    return p_values;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-                    B L O C K  Frequency  T E S T
+                    BLOCK  Frequency  TEST
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+bool CanRunBlockFrequencyTest (int n, int M)
+{
+   int N = n / M;
+   std::cout << "Block Frequency Test:  N = " << N << " M = " << M << " n = " << n << std::endl;
+   /*
+    * Disable test if conditions do not permit this test from being run
+    */
+   if (n < MIN_LENGTH_BLOCK_FREQUENCY)
+   {
+      std::cout << "disabling test<< BlockFrequency requires bitcount(n): " << n << " >= " << MIN_LENGTH_BLOCK_FREQUENCY << std::endl;
+      return false;
+   }
+   else if (M < MIN_M_BLOCK_FREQUENCY)
+   {
+      std::cout << "disabling test BlockFrequency requires block length(M): " << M << " >= " << MIN_M_BLOCK_FREQUENCY << std::endl;
+      return false;
+   }
+   else if (M <= MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY * n)
+   {
+      std::cout << "disabling test BlockFrequency requires block length(M): " << M << " > " << MIN_RATIO_M_OVER_n_BLOCK_FREQUENCY
+                << " * n, and here n = " << n << std::endl;
+      return false;
+   }
+   else if (N > MAX_N_BLOCK_FREQUENCY)
+   {
+      std::cout << "disabling test BlockFrequency requires " << N << " <= " << MAX_N_BLOCK_FREQUENCY << std::endl;
+      return false;
+   }
+   return true;
+}
 double BlockFrequency (int M, int n)
 {
-   int i, j, N, blockSum;
-   double p_value, sum, pi, v, chi_squared;
+   int i = 0;
+   int j = 0;
+   int N = 0;
+   int blockSum = 0;
+   double p_value = 0;
+   double sum = 0;
+   double pi = 0;
+   double v = 0;
+   double chi_squared = 0;
 
    N = n / M; /* # OF SUBSTRING BLOCKS      */
    sum = 0.0;
@@ -2805,7 +2936,7 @@ double BlockFrequency (int M, int n)
    // std::printf ("  (d) Note: %d Bits Were Discarded.\n", n % M);
    // std::printf ("  ---------------------------------------------\n");
 
-   // std::printf ("%s  p_value = %f\n\n", p_value < ALPHA ? "FAILURE" : "SUCCESS", p_value);
+   std::cout << (p_value < ALPHA ? "FAILURE" : "SUCCESS") << "  p_value = " << p_value << "\n\n";
    return p_value;
 }
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *

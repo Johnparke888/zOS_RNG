@@ -32,11 +32,16 @@ void dradfg (int ido, int ip, int l1, int idl1, double *cc, double *c1, double *
 void drftf1 (int n, double *c, double *ch, double *wa, int *ifac);
 void drfti1 (int n, double *wa, int *ifac);
 
+bool EvaluateApproximateEntropyResult (double p_value);
+
 double ApproximateEntropy (int m, int n);
+bool CanRunBlockFrequencyTest (int n, int M);
 double BlockFrequency (int M, int n);
 std::pair<double, double> CumulativeSums (int n);
 double DiscreteFourierTransform (int n);
 double Frequency (int n);
+bool CanRunSerial (int m, int n);
+std::pair<bool, bool> EvaluateSerialResults (double p_value1, double p_value2);
 double LinearComplexity (int M, int n);
 double LongestRunOfOnes (int n);
 std::vector<double> NonOverlappingTemplateMatchings (int m, int n);

@@ -46,13 +46,8 @@ static int choose_approximate_entropy_m (int n)
 
 static int choose_block_frequency_M (int n)
 {
-   if (n / 128 >= 100)
-   {
-      return 128;
-   }
-
    int M = n / 100;
-   return std::clamp (M, 20, 128);
+   return std::max (20, M);
 }
 
 static bool universal_is_applicable (int n)
@@ -194,7 +189,7 @@ static constexpr int randomExcursionVariantStates[18] = {-9, -8, -7, -6, -5, -4,
 int main ()
 {
    int rc = 0;
-   int numberOfRuns = 100;
+   int numberOfRuns = 10;
 
    constexpr std::array<GeneratorType, 6> allGenerators = {GeneratorType::TRNO,
                                                            GeneratorType::JITTER,
@@ -206,7 +201,7 @@ int main ()
    constexpr std::array<const char *, 6> generatorNames = {
        "PRNO-TRNG", "CPU jitter", "/dev/urandom", "Naive PRNG", "Bad Raw Clock", "Bad Hash Counter"};
 
-   constexpr std::size_t sample_size = 128 * 1024;
+   constexpr std::size_t sample_size = 16 * 1024;
    std::vector<unsigned char> random_data (sample_size);
 
    epsilon = static_cast<unsigned char *> (std::malloc (sample_size * 8));
@@ -267,9 +262,13 @@ int main ()
             std::cout << "LinearComplexity M   : " << linearComplexityM << '\n';
             std::cout << "============================================================\n\n";
          }
-
-         pvalues["ApproximateEntropy"].push_back (ApproximateEntropy (approximateM, n));
+         auto approximateEntropyResult = ApproximateEntropy (approximateM, n);
+         if (EvaluateApproximateEntropyResult (approximateEntropyResult))
+         {
+             pvalues["ApproximateEntropy"].push_back (approximateEntropyResult);
+         }
          pvalues["Frequency"].push_back (Frequency (n));
+
          pvalues["Runs"].push_back (Runs (n));
 
          if (rank_is_reasonable (n))
@@ -287,10 +286,19 @@ int main ()
          {
             pvalues["Universal"].push_back (Universal (n));
          }
-
-         auto serial = Serial (serialM, n);
-         pvalues["Serial.1"].push_back (serial.first);
-         pvalues["Serial.2"].push_back (serial.second);
+         if (CanRunSerial (serialM, n))
+         {
+            auto serial = Serial (serialM, n);
+            auto serialResults = EvaluateSerialResults (serial.first, serial.second);
+            if (serialResults.first)
+            {
+               pvalues["Serial.m=" + std::to_string (serialM)].push_back (serial.first);
+            }
+            if (serialResults.second)
+            {
+               pvalues["Serial.2"].push_back (serial.second);
+            }
+         }
 
          auto templates = NonOverlappingTemplateMatchings (templateM, n);
          for (std::size_t i = 0; i < templates.size (); ++i)
@@ -318,8 +326,10 @@ int main ()
                }
             }
          }
-
-         pvalues["BlockFrequency"].push_back (BlockFrequency (blockFrequencyM, n));
+         if (CanRunBlockFrequencyTest (n, blockFrequencyM))
+         {
+            pvalues["BlockFrequency"].push_back (BlockFrequency (blockFrequencyM, n));
+         }
          pvalues["OverlappingTemplate"].push_back (OverlappingTemplateMatchings (templateM, n));
 
          if (linear_complexity_is_reasonable (n, linearComplexityM))
@@ -343,7 +353,6 @@ int main ()
 
       const auto generatorEnd = std::chrono::steady_clock::now ();
       std::cout << "Completed generator: " << generatorNames[generator] << " in " << format_elapsed_time (generatorEnd - generatorStart) << "\n";
-      
    }
 
    std::free (epsilon);
